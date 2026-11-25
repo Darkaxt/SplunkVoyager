@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#f5f6f8;--panel:#fff;--ink:#1d2330;--mute:#667085;--line:#e3e6ea;--accent:#2f5bd3;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-rows:auto auto 1fr auto;height:100vh;overflow:hidden}
+header{padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+header h1{font-size:16px;margin:0}header .meta{color:var(--mute);font-size:12px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:7px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.bar label{display:inline-flex;gap:4px;align-items:center;color:var(--mute);font-size:12px;white-space:nowrap}
+.bar select,.bar input[type=search],.bar input[type=number]{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:5px;background:#fff}
+.bar input[type=search]{width:180px}.bar input[type=number]{width:56px}
+button{font:inherit;font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer}
+button:hover{border-color:var(--accent)}button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.sep{width:1px;height:20px;background:var(--line)}
+#clock{font-family:var(--mono);font-size:12.5px;min-width:180px}
+main{display:grid;grid-template-columns:1fr 380px;min-height:0}
+#stage{position:relative;min-height:0;overflow:hidden;background:#fbfcfd}
+#graph{width:100%;height:100%;display:block;cursor:grab}
+#graph.drag{cursor:grabbing}
+#side{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:12px 14px}
+#side h2{font-size:14px;margin:0 0 4px;word-break:break-all}#side h3{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin:14px 0 5px}
+.tag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:600;background:#eef2f8;color:#3b4a63;margin-right:4px}
+.tag.infra{background:#f1f1f1;color:#777}.tag.seed{background:#efe5fb;color:#6b2fbf}
+dl{display:grid;grid-template-columns:90px 1fr;gap:2px 8px;margin:6px 0}dt{color:var(--mute)}dd{margin:0;word-break:break-all}
+.mono{font-family:var(--mono);font-size:12px}
+.list div{padding:3px 0;border-bottom:1px solid #f0f1f3;cursor:pointer;display:flex;gap:6px;align-items:center}.list div:hover{background:#f6f8fb}
+.list .n{margin-left:auto;color:var(--mute);font-family:var(--mono);font-size:11.5px}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+pre.raw{font-family:var(--mono);font-size:11px;background:#f3f4f6;padding:7px;border-radius:5px;white-space:pre-wrap;word-break:break-all;max-height:170px;overflow:auto;margin:4px 0}
+.cmd{font-family:var(--mono);font-size:11.5px;background:#f3f4f6;padding:7px;border-radius:5px;word-break:break-all}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+#tl{background:var(--panel);border-top:1px solid var(--line);height:190px;overflow:auto;position:relative}
+#tlsvg{display:block;cursor:crosshair}
+.legend{position:absolute;left:10px;bottom:10px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:11.5px;color:var(--mute)}
+.legend span{display:inline-flex;align-items:center;gap:4px;margin-right:9px}
+.hint{position:absolute;right:10px;bottom:10px;font-size:11.5px;color:var(--mute);background:rgba(255,255,255,.9);padding:3px 7px;border-radius:5px}
+@keyframes pulse{0%{stroke:#e4002b;stroke-opacity:1}100%{stroke-opacity:.9}}
+.edge.new{animation:pulse 1.2s ease-out}
+.edge.co{stroke-dasharray:7 4}
+.node text{font-size:11px;fill:#1d2330;paint-order:stroke;stroke:#fff;stroke-width:3px;pointer-events:none}
+.node.dim{opacity:.15}.edge.dim{opacity:.05}
+.node.sel circle{stroke:#111;stroke-width:2.5px}
+table.ents{width:100%;border-collapse:collapse;font-size:12px}table.ents td,table.ents th{padding:3px 5px;border-bottom:1px solid #eef0f2;text-align:left}
+table.ents th{color:var(--mute);font-weight:600;cursor:pointer;position:sticky;top:0;background:#fff}
+table.ents tr:hover td{background:#f6f8fb;cursor:pointer}
+</style></head><body>
+<header><h1 id="title"></h1><span class="meta" id="meta"></span></header>
+<div class="bar">
+  <button id="play">▶ Play</button><button id="stepb">◀</button><button id="stepf">▶|</button>
+  <span id="clock"></span>
+  <label>step <select id="gran"><option value="60">1 min</option><option value="300">5 min</option><option value="900">15 min</option><option value="3600">hour</option><option value="86400" selected>day</option></select></label>
+  <label>speed <select id="speed"><option>2</option><option selected>4</option><option>8</option><option>16</option><option>32</option><option>60</option></select>/s</label>
+  <label title="Play and the step buttons jump over steps with no events"><input type="checkbox" id="skipq" checked> skip quiet</label>
+  <label>range <select id="range"><option value="0">whole case</option><option value="7200">±2 hours</option><option value="21600">±6 hours</option><option value="86400">±1 day</option><option value="259200">±3 days</option><option value="604800">±7 days</option></select></label>
+  <label>mode <select id="mode"><option value="cum">cumulative</option><option value="win">sliding window</option></select></label>
+  <label>window <input type="number" id="win" value="3" min="1"> steps</label>
+  <span class="sep"></span>
+  <span id="types"></span>
+  <label><input type="checkbox" id="infra"> show infrastructure</label>
+  <label>min events <input type="number" id="minc" value="1" min="1"></label>
+  <input type="search" id="q" placeholder="highlight…">
+  <span class="sep"></span>
+  <label><input type="checkbox" id="local"> local time</label>
+  <button id="tableBtn">Entity table</button><button id="fit">Fit</button>
+</div>
+<main>
+  <div id="stage"><svg id="graph"></svg>
+    <div class="legend" id="legend"></div><div class="hint">drag background to pan · wheel to zoom · drag nodes · click for details</div></div>
+  <div id="side"></div>
+</main>
+<div id="tl"><svg id="tlsvg"></svg></div>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+"use strict";
+const D=JSON.parse(document.getElementById('data').textContent);
+const $=s=>document.querySelector(s), NS='http://www.w3.org/2000/svg';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const COLORS={seed:'#7b2fd3',ioc:'#7b2fd3',source:'#1f3a68',ip:'#e07b00',domain:'#0f8b8d',url:'#2a9fd6',email:'#c2185b',account:'#2e7d32',host:'#8d6e63'};
+const TYPES=['ip','domain','url','email','account','host'];
+const el=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e};
+let LOCAL=false;
+function ft(t,withTime=true,sec=false){if(t==null)return'';const d=new Date(t*1000),p=n=>String(n).padStart(2,'0');
+ if(LOCAL)return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`+(withTime?` ${p(d.getHours())}:${p(d.getMinutes())}`+(sec?`:${p(d.getSeconds())}`:''):'');
+ const s=d.toISOString();return s.slice(0,10)+(withTime?' '+s.slice(11,sec?19:16)+'Z':'')}
+
+// ------------------------------------------------------------------ model
+const N=new Map();D.nodes.forEach(n=>N.set(n.id,n));
+const E=D.edges.filter(e=>N.has(e.s)&&N.has(e.t));
+const adj=new Map();N.forEach((n,id)=>adj.set(id,[]));
+E.forEach((e,i)=>{e.i=i;adj.get(e.s).push(e);adj.get(e.t).push(e)});
+const seedSet=new Set(D.seeds.map(s=>s.key));N.forEach(n=>{if(seedSet.has(n.id))n.seed=true});
+// time axis
+const allBins=[...new Set(E.flatMap(e=>e.b.map(x=>x[0])))].sort((a,b)=>a-b);
+const T0=allBins[0]??0, T1=allBins[allBins.length-1]??0;
+let STEP=86400, T=[], S=[];  // T: step start times; S[edge.i]: sparse {si: step indexes, cs: running totals}
+const MAXSTEPS=4000;let ACTIVE=[];   // steps with at least one event
+function nextStep(i,dir){if(!$('#skipq').checked||!ACTIVE.length)return Math.min(T.length-1,Math.max(0,i+dir));
+ if(dir>0){const j=ACTIVE.find(x=>x>i);return j===undefined?T.length-1:j}
+ for(let k=ACTIVE.length-1;k>=0;k--)if(ACTIVE[k]<i)return ACTIVE[k];return 0}          // finer steps narrow the range automatically
+function stepOf(t){return Math.floor(t/STEP)*STEP}
+// running total of edge e up to and including step i (binary search over the steps where it has events)
+function cum(e,i){const {si,cs}=S[e.i];if(i<0||!si.length||si[0]>i)return 0;let lo=0,hi=si.length-1;
+ while(lo<hi){const m=(lo+hi+1)>>1;if(si[m]<=i)lo=m;else hi=m-1}return cs[lo]}
+function addVals(vals,e){const {si,cs}=S[e.i];for(let k=0;k<si.length;k++)vals[si[k]]+=cs[k]-(k?cs[k-1]:0)}
+let RANGE=null; // [t0,t1] or null = whole case
+function buildAxis(){
+ const lo=RANGE?Math.max(T0,RANGE[0]):T0, hi=RANGE?Math.min(T1,RANGE[1]):T1;
+ const s=stepOf(lo),e=stepOf(hi);T=[];for(let t=s;t<=e;t+=STEP)T.push(t);
+ if(!T.length)T=[stepOf(T0)];
+ S=E.map(ed=>{const m=new Map();let first=1e9;ed.b.forEach(([t,c])=>{let i=Math.floor((stepOf(t)-s)/STEP);
+   if(i<0)i=0;else if(i>=T.length)return;m.set(i,(m.get(i)||0)+c);if(i<first)first=i});
+  const si=Int32Array.from([...m.keys()].sort((a,b)=>a-b)),cs=new Float64Array(si.length);let r=0;
+  si.forEach((i,k)=>{r+=m.get(i);cs[k]=r});ed.first=first;return {si,cs}});
+ {const a=new Uint8Array(T.length);S.forEach(({si})=>si.forEach(i=>{a[i]=1}));ACTIVE=[];a.forEach((v,i)=>{if(v)ACTIVE.push(i)})}
+ N.forEach(n=>{n.firstStep=1e9});E.forEach(ed=>{for(const id of [ed.s,ed.t]){const n=N.get(id);if(ed.first<n.firstStep)n.firstStep=ed.first}});
+}
+let cur=0, playing=false, timer=null;
+const w=e=>{if($('#mode').value==='cum')return cum(e,cur);const W=Math.max(1,+$('#win').value||1);return cum(e,cur)-cum(e,cur-W)};
+const seen=e=>e.first<=cur;
+
+// ------------------------------------------------------------------ filters
+const typeBoxes={};
+$('#types').innerHTML=TYPES.map(t=>`<label><input type="checkbox" data-t="${t}" checked><span class="dot" style="background:${COLORS[t]}"></span>${t}</label>`).join(' ');
+document.querySelectorAll('#types input').forEach(b=>{typeBoxes[b.dataset.t]=b;b.onchange=draw});
+function nodeAllowed(n){if(n.seed||n.type==='source')return true;if(n.hidden)return false;if(n.infra&&!$('#infra').checked)return false;
+ if(typeBoxes[n.type]&&!typeBoxes[n.type].checked)return false;return true}
+function edgeAllowed(e){return nodeAllowed(N.get(e.s))&&nodeAllowed(N.get(e.t))&&e.count>=(+$('#minc').value||1)}
+
+// ------------------------------------------------------------------ layout (fixed: computed once on the full graph)
+const VN=[...N.values()].filter(n=>!n.hidden||n.seed), VE=E.filter(e=>!N.get(e.s).hidden&&!N.get(e.t).hidden);
+function layout(){
+ const seeds=VN.filter(n=>n.seed),srcs=VN.filter(n=>n.type==='source'&&!n.seed);
+ seeds.forEach((n,i)=>{const a=2*Math.PI*i/Math.max(1,seeds.length);n.x=seeds.length>1?Math.cos(a)*220:0;n.y=seeds.length>1?Math.sin(a)*220:0});
+ srcs.forEach((n,i)=>{const a=2*Math.PI*i/Math.max(1,srcs.length);n.x=Math.cos(a)*420+(Math.random()-.5)*20;n.y=Math.sin(a)*420+(Math.random()-.5)*20});
+ VN.filter(n=>!n.seed&&n.type!=='source').forEach(n=>{const es=adj.get(n.id).filter(e=>e.t===n.id);const s=es.length?N.get(es[0].s):null;
+  const a=Math.random()*2*Math.PI,r=90+Math.random()*90;n.x=(s?s.x:0)+Math.cos(a)*r;n.y=(s?s.y:0)+Math.sin(a)*r});
+ const K=70,iters=VN.length>1200?160:260,cell=K*3;
+ for(let it=0;it<iters;it++){
+  const temp=30*(1-it/iters)+1,grid=new Map();
+  VN.forEach(n=>{n.dx=0;n.dy=0;const k=Math.floor(n.x/cell)+','+Math.floor(n.y/cell);(grid.get(k)||grid.set(k,[]).get(k)).push(n)});
+  VN.forEach(n=>{const gx=Math.floor(n.x/cell),gy=Math.floor(n.y/cell);
+   for(let ix=-1;ix<=1;ix++)for(let iy=-1;iy<=1;iy++){const L=grid.get((gx+ix)+','+(gy+iy));if(!L)continue;
+    for(const m of L){if(m===n)continue;let dx=n.x-m.x,dy=n.y-m.y,d2=dx*dx+dy*dy;if(d2<0.01){dx=Math.random();dy=Math.random();d2=1}
+     const d=Math.sqrt(d2),f=K*K/d*(n.type==='source'||m.type==='source'?2:1);n.dx+=dx/d*f;n.dy+=dy/d*f}}});
+  VE.forEach(e=>{const a=N.get(e.s),b=N.get(e.t);const dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+   const ideal=e.kind==='seed'?260:e.kind==='cooccur'?300:K*1.4,f=(d-ideal)*(d/ideal)*0.5;a.dx-=dx/d*f;a.dy-=dy/d*f;b.dx+=dx/d*f;b.dy+=dy/d*f});
+  VN.forEach(n=>{n.dx-=n.x*0.004;n.dy-=n.y*0.004;const d=Math.sqrt(n.dx*n.dx+n.dy*n.dy)||1;const m=Math.min(d,temp);
+   if(!(n.seed&&seeds.length===1)){n.x+=n.dx/d*m;n.y+=n.dy/d*m}});
+ }
+}
+
+// ------------------------------------------------------------------ svg
+const svg=$('#graph'),root=el('g',{}),gE=el('g',{}),gN=el('g',{});root.append(gE,gN);svg.append(root);
+let view={x:0,y:0,k:1};function applyView(){root.setAttribute('transform',`translate(${view.x},${view.y}) scale(${view.k})`)}
+const orList=(f,vs)=>vs.length===1?`${f}=${q_(vs[0])}`:'('+vs.map(v=>`${f}=${q_(v)}`).join(' OR ')+')';
+const srcSpl=n=>{const i=Object.keys(n.by_index||{}),t=Object.keys(n.by_st||{});
+ return [i.length?orList('index',i):'index=*',t.length?orList('sourcetype',t):''].filter(Boolean).join(' ')};
+const radius=n=>n.seed?13:n.type==='source'?7+Math.min(9,Math.log10((n.stage1||1)+1)*1.4):3.5+Math.min(6,Math.log10((n.count||1)+1)*1.6);
+const tcol=(i)=>{const f=T.length>1?i/(T.length-1):0;const a=[47,91,211],b=[232,124,0];return `rgb(${a.map((v,j)=>Math.round(v+(b[j]-v)*f)).join(',')})`};
+VE.forEach(e=>{e.el=el('line',{class:e.kind==='cooccur'?'edge co':'edge','stroke-linecap':'round'});gE.append(e.el)});
+VN.forEach(n=>{const g=el('g',{class:'node'});const c=el('circle',{r:radius(n),fill:COLORS[n.seed?'seed':n.type]||'#999',stroke:n.infra?'#999':'#fff','stroke-width':n.infra?1.5:1,'stroke-dasharray':n.infra?'2 2':''});
+ g.append(c);n.lbl=el('text',{x:radius(n)+3,y:4});n.lbl.textContent=short(n.label);g.append(n.lbl);n.el=g;g.__n=n;gN.append(g)});
+function short(s){s=String(s||'');return s.length>42?s.slice(0,40)+'…':s}
+function place(){VE.forEach(e=>{const a=N.get(e.s),b=N.get(e.t);e.el.setAttribute('x1',a.x);e.el.setAttribute('y1',a.y);e.el.setAttribute('x2',b.x);e.el.setAttribute('y2',b.y)});
+ VN.forEach(n=>n.el.setAttribute('transform',`translate(${n.x},${n.y})`))}
+function fit(){const b=gN.getBBox(),W=svg.clientWidth,H=svg.clientHeight;if(!b.width)return;const k=Math.min(W/(b.width+80),H/(b.height+80),2.5);
+ view={k,x:W/2-(b.x+b.width/2)*k,y:H/2-(b.y+b.height/2)*k};applyView()}
+
+// ------------------------------------------------------------------ draw state for current step
+let selected=null;const prevVis=new Set();
+function draw(){
+ const q=$('#q').value.trim().toLowerCase();const visN=new Set();const visibleEdges=[];
+ VE.forEach(e=>{const ok=edgeAllowed(e)&&seen(e);const wt=ok?w(e):0;const show=ok&&($('#mode').value==='cum'||wt>0);
+  e.el.style.display=show?'':'none';if(!show){e.el.classList.remove('new');return}
+  visN.add(e.s);visN.add(e.t);visibleEdges.push(e);
+  const width=0.6+Math.log10(wt+1)*1.3;e.el.setAttribute('stroke-width',width.toFixed(2));
+  const recentW=Math.max(1,+$('#win').value||1);const recent=cum(e,cur)-cum(e,cur-recentW);
+  e.el.setAttribute('stroke',e.kind==='cooccur'?'#7b2fd3':tcol(e.first));e.el.setAttribute('stroke-opacity',e.kind==='cooccur'?0.9:($('#mode').value==='cum'&&recent===0)?0.25:0.85);if(e.kind==='cooccur')e.el.setAttribute('stroke-width',Math.max(2,width).toFixed(2));
+  const isNew=e.first===cur;if(isNew&&!e.el.classList.contains('new')){e.el.classList.remove('new');void e.el.getBBox();e.el.classList.add('new')}else if(!isNew)e.el.classList.remove('new')});
+ D.seeds.forEach(s=>{if(N.has(s.key))visN.add(s.key)});
+ VN.forEach(n=>{const v=visN.has(n.id)&&nodeAllowed(n);n.el.style.display=v?'':'none';
+  const hit=q&&String(n.label).toLowerCase().includes(q);n.el.classList.toggle('dim',!!q&&!hit&&!n.seed);
+  n.lbl.style.display=(n.seed||n.type==='source'||hit||n===selected||(n.firstStep===cur&&!n.infra))?'':'none';
+  n.el.classList.toggle('sel',n===selected)});
+ VE.forEach(e=>e.el.classList.toggle('dim',!!q&&!(String(N.get(e.s).label).toLowerCase().includes(q)||String(N.get(e.t).label).toLowerCase().includes(q))));
+ $('#clock').textContent=`${ft(T[cur],STEP<86400)} (${cur+1}/${T.length})`;
+ drawCursor();
+}
+
+// ------------------------------------------------------------------ timeline (swimlanes)
+const tl=$('#tlsvg');let TLX0=230,TLW=0,laneH=15,lanes=[];
+function buildTimeline(){
+ const srcs=VN.filter(n=>n.type==='source').sort((a,b)=>a.firstStep-b.firstStep||(a.first??0)-(b.first??0));
+ const cos=VE.filter(e=>e.kind==='cooccur').map(e=>({label:`${N.get(e.s).label} ⇄ ${N.get(e.t).label}`,kind:'co',edge:e,node:N.get(e.s)}));
+ lanes=[{label:'new entities',kind:'new'},...cos,...srcs.map(n=>({label:n.label,node:n}))];
+ TLW=Math.max(600,($('#tl').clientWidth||900)-TLX0-20);const H=lanes.length*laneH+26;tl.setAttribute('width',TLX0+TLW+10);tl.setAttribute('height',H);tl.innerHTML='';
+ const bw=TLW/Math.max(1,T.length);
+ // axis ticks
+ const nt=Math.min(12,T.length);for(let k=0;k<nt;k++){const i=Math.round(k*(T.length-1)/Math.max(1,nt-1));const x=TLX0+i*bw;
+  tl.append(el('line',{x1:x,x2:x,y1:14,y2:H,stroke:'#eef0f2'}));const t=el('text',{x:x+2,y:11,'font-size':10,fill:'#667085'});t.textContent=ft(T[i],STEP<86400);tl.append(t)}
+ lanes.forEach((ln,r)=>{const y=18+r*laneH;const lab=el('text',{x:6,y:y+10,'font-size':11,fill:ln.kind?'#7b2fd3':'#1d2330'});lab.textContent=(ln.node&&ln.node.coarse&&STEP<3600?'~ ':'')+short(ln.label).slice(0,34);tl.append(lab);
+  let vals;if(ln.kind==='new'){vals=new Array(T.length).fill(0);VN.forEach(n=>{if(!n.seed&&n.type!=='source'&&n.firstStep<T.length&&nodeAllowed(n))vals[n.firstStep]++})}
+  else if(ln.kind==='co'){vals=new Array(T.length).fill(0);addVals(vals,ln.edge)}
+  else{vals=new Array(T.length).fill(0);adj.get(ln.node.id).filter(e=>e.kind==='seed').forEach(e=>addVals(vals,e))}
+  const mx=Math.max(1,...vals);vals.forEach((v,i)=>{if(!v)return;const h=Math.max(2,(laneH-3)*Math.log10(v+1)/Math.log10(mx+1));
+   tl.append(el('rect',{x:TLX0+i*bw,y:y+laneH-2-h,width:Math.max(1,bw-0.5),height:h,fill:ln.kind?'#b48be6':'#2f5bd3'}))});
+  const tt=el('title',{});tt.textContent=`${ln.label}: ${vals.reduce((x,y)=>x+y,0).toLocaleString()} in view${ln.node?' (click for details)':''}`;lab.append(tt);
+  if(ln.node){lab.style.cursor='pointer';lab.addEventListener('click',()=>select(ln.node))}});
+ tl.__cursor=el('line',{y1:14,y2:H,stroke:'#e4002b','stroke-width':1.5});tl.append(tl.__cursor);
+}
+function drawCursor(){if(!tl.__cursor)return;const bw=TLW/Math.max(1,T.length);const x=TLX0+(cur+0.5)*bw;tl.__cursor.setAttribute('x1',x);tl.__cursor.setAttribute('x2',x)}
+function tlPick(ev){const r=tl.getBoundingClientRect();const x=ev.clientX-r.left-TLX0;const i=Math.floor(x/(TLW/Math.max(1,T.length)));if(i>=0&&i<T.length){cur=i;draw()}}
+tl.addEventListener('mousedown',e=>{tlPick(e);const mv=ev=>tlPick(ev);window.addEventListener('mousemove',mv);window.addEventListener('mouseup',()=>window.removeEventListener('mousemove',mv),{once:true})});
+
+// ------------------------------------------------------------------ details
+function spl(q,t0,t1){const s=D.splunk;let u=`${s.base}/${s.locale}/app/${s.app}/search?q=${encodeURIComponent('search '+q)}`;
+ if(t0!=null)u+=`&earliest=${Math.floor(t0)}&latest=${Math.ceil(t1)}`;return u}
+const q_=v=>'"'+String(v).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
+function dstr(t){return new Date(t*1000).toISOString().slice(0,10)}
+function spark(n){const vals=new Array(T.length).fill(0);adj.get(n.id).forEach(e=>addVals(vals,e));
+ const mx=Math.max(1,...vals),W=340,H=40;let d='';vals.forEach((v,i)=>{const x=i*W/Math.max(1,T.length-1),y=H-(H-2)*Math.log10(v+1)/Math.log10(mx+1);d+=(i?'L':'M')+x.toFixed(1)+','+y.toFixed(1)});
+ const cx=(cur*W/Math.max(1,T.length-1)).toFixed(1);
+ return `<svg width="${W}" height="${H}" style="background:#f7f8fa;border-radius:4px"><path d="${d}" fill="none" stroke="#2f5bd3" stroke-width="1.3"/><line x1="${cx}" x2="${cx}" y1="0" y2="${H}" stroke="#e4002b"/></svg>`}
+function select(n){selected=n;draw();renderSide()}
+function renderSide(){const n=selected;if(!n){$('#side').innerHTML=sideHelp();return}
+ const es=adj.get(n.id).slice().sort((a,b)=>b.count-a.count);
+ const tags=(n.seed?'<span class="tag seed">seed</span>':'')+`<span class="tag">${esc(n.type)}</span>`+(n.infra?'<span class="tag infra">infrastructure</span>':'')+(n.hidden?'<span class="tag infra">not drawn</span>':'');
+ let h=`<h2>${esc(n.label)}</h2>${tags}<dl>`;
+ const kv=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1]);
+ if(n.type==='source'){const bi=kv(n.by_index),bs=kv(n.by_st);
+  if(bi.length>1||bs.length>1||!n.label.includes(' · ')){
+   if(bi.length)h+=`<dt>Index${bi.length>1?'es':''}</dt><dd>${bi.map(([k,v])=>`${esc(k)} <span style="color:#667085">${v.toLocaleString()}</span>`).join('<br>')}</dd>`;
+   if(bs.length)h+=`<dt>Sourcetype${bs.length>1?'s':''}</dt><dd>${bs.map(([k,v])=>`${esc(k)} <span style="color:#667085">${v.toLocaleString()}</span>`).join('<br>')}</dd>`}
+  h+=`<dt>Events (stage 1)</dt><dd>${(n.stage1||0).toLocaleString()}</dd><dt>Raw pulled</dt><dd>${n.pulled?(n.raw_events||0).toLocaleString()+' events':'no (over size limit)'}</dd>`;
+  if(n.coarse)h+=`<dt>Resolution</dt><dd>hourly (stage-1 counts only)</dd>`;
+  if(n.variants&&Object.keys(n.variants).length)h+=`<dt>Found as</dt><dd>${Object.entries(n.variants).sort((a,b)=>b[1]-a[1]).map(([l,c])=>`${esc(l)} (${c.toLocaleString()})`).join('<br>')}</dd>`}
+ else h+=`<dt>Events</dt><dd>${(n.count||0).toLocaleString()}</dd>`;
+ const f=n.first??(n.firstStep<T.length?T[n.firstStep]:null);
+ h+=`<dt>First</dt><dd class="mono">${esc(ft(f,true,!n.coarse))}</dd><dt>Last</dt><dd class="mono">${esc(ft(n.last,true,!n.coarse))}</dd><dt>Seeds</dt><dd>${esc((n.seeds||[]).join(', '))}</dd></dl>${spark(n)}`;
+ h+=`<h3>Connections (${es.length})</h3><div class="list">`+es.slice(0,40).map(e=>{const o=N.get(e.s===n.id?e.t:e.s);
+  return `<div data-id="${esc(o.id)}"><span class="dot" style="background:${COLORS[o.seed?'seed':o.type]}"></span>${e.kind==='cooccur'?'⇄ ':''}${esc(short(o.label))}<span class="n">${e.count.toLocaleString()} · ${esc(ft(e.ft??T[e.first]??null))}</span></div>`}).join('')+(es.length>40?`<div class="muted">… ${es.length-40} more</div>`:'')+`</div>`;
+ // samples
+ if(!D.sanitized&&n.type!=='source'){const co=adj.get(n.id).filter(e=>e.kind==='cooccur');
+  co.forEach(e=>{const o=N.get(e.s===n.id?e.t:e.s);const ss=D.samples[`${e.s}|${e.t}`]||[];
+   h+=`<h3>Together with ${esc(short(o.label))} (${e.count.toLocaleString()} event${e.count>1?'s':''})</h3><div class="mono" style="color:#667085">${esc(ft(e.ft))} → ${esc(ft(e.last))}</div>`+ss.map(s=>`<div class="mono" style="color:#667085">${esc(ft(s.t))} · ${esc(short(s.src))}</div><pre class="raw">${esc(s.raw)}</pre>`).join('')});
+  const ss=[];adj.get(n.id).filter(e=>e.kind!=='cooccur').forEach(e=>{const k=`${e.s}|${e.t}`;(D.samples[k]||[]).forEach(s=>ss.push({src:N.get(e.s).label,...s}))});
+  if(ss.length){h+=`<h3>Sample events</h3>`+ss.slice(0,6).map(s=>`<div class="mono" style="color:#667085">${esc(ft(s.t))} · ${esc(short(s.src))}</div><pre class="raw">${esc(s.raw)}</pre>`).join('')}}
+ // pivots
+ if(!D.sanitized){const t0=(f??T0)-86400,t1=(n.last??T1)+86400;h+=`<h3>Pivots</h3>`;
+  if(n.type==='source'){(n.seeds||[]).forEach(s=>{h+=`<div><a target="_blank" rel="noopener" href="${esc(spl(`${srcSpl(n)} ${q_(s)}`,t0,t1))}">events of ${esc(short(s))} in this source</a></div>`})}
+  else{h+=`<div><a target="_blank" rel="noopener" href="${esc(spl(`index=* ${q_(n.label)}`,t0,t1))}">${esc(short(n.label))} anywhere (±1 day)</a></div>`;
+   if(!n.seed&&D.api){h+=`<h3>Expand this node</h3><button data-map="${esc(n.label)}">Search it in Voyager</button>
+    <div class="mono" style="color:#667085;margin-top:4px">Runs in this investigation's entity mapper; the graph is rebuilt when it finishes (reload this page).</div>`}
+   else if(!n.seed){const cmd=`python pivot_graph.py seed ${(D.cases||[D.case])[0]} ${q_(n.label)} --earliest ${dstr(t0)} --latest ${dstr(t1+86400)}`;
+    h+=`<h3>Expand this node</h3><div class="cmd">${esc(cmd)}</div><button data-copy="${esc(cmd)}" style="margin-top:5px">copy command</button>
+    <div class="mono" style="color:#667085;margin-top:4px">then: python pivot_graph.py build ${esc((D.cases||[D.case]).join(' '))}</div>`}}}
+ $('#side').innerHTML=h;
+ $('#side').querySelectorAll('[data-id]').forEach(d=>d.onclick=()=>{const o=N.get(d.dataset.id);if(o){if(o.hidden){o.hidden=false}select(o)}});
+}
+document.addEventListener('click',async e=>{const m=e.target.closest('[data-map]');if(!m)return;m.disabled=true;m.textContent='starting...';
+ try{const r=await fetch(D.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({values:[m.dataset.map]})});
+  const j=await r.json();m.textContent=r.ok?'queued in Voyager':('failed: '+(j.message||r.status))}catch(err){m.textContent='Voyager not reachable'}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-copy]');if(b){navigator.clipboard.writeText(b.dataset.copy);b.textContent='copied';setTimeout(()=>b.textContent='copy command',1200)}});
+function sideHelp(){const ents=VN.filter(n=>!n.seed&&n.type!=='source');const byT={};ents.forEach(n=>byT[n.type]=(byT[n.type]||0)+1);
+ return `<h2>Overview</h2><dl><dt>Seeds</dt><dd>${D.seeds.map(s=>`${esc(s.value)}<div style="color:#667085;font-size:11.5px">searched: ${esc((s.variants||[]).join(', '))}</div>`).join('')}</dd>${VE.some(e=>e.kind==='cooccur')?`<dt>Seed links</dt><dd>${VE.filter(e=>e.kind==='cooccur').map(e=>`${esc(short(N.get(e.s).label))} ⇄ ${esc(short(N.get(e.t).label))}: ${e.count.toLocaleString()}`).join('<br>')}</dd>`:''}<dt>Sources</dt><dd>${VN.filter(n=>n.type==='source').length}</dd>
+ <dt>Entities</dt><dd>${Object.entries(byT).map(([t,c])=>`${c} ${t}`).join(', ')||'—'}</dd><dt>Period</dt><dd class="mono">${esc(ft(T0))} → ${esc(ft(T1))}</dd></dl>
+ <p style="color:#667085">Press <b>Play</b> to replay how the relations appeared. Edge colour = first seen (blue early → orange late), width = events (log scale); new edges flash red. Dashed nodes are infrastructure (present in most events of a source), hidden by default.</p>
+ ${D.sanitized?'<p class="tag infra">Sanitised build: identifiers replaced, samples and pivots removed.</p>':''}`}
+
+// ------------------------------------------------------------------ entity table
+function showTable(){const rows=[...N.values()].filter(n=>!n.seed&&n.type!=='source');
+ let sortK='count',dir=-1;const render=()=>{rows.sort((a,b)=>((a[sortK]??0)>(b[sortK]??0)?1:-1)*dir);
+  $('#side').innerHTML=`<h2>Entities (${rows.length})</h2><table class="ents"><tr><th data-k="label">value</th><th data-k="type">type</th><th data-k="count">events</th><th data-k="first">first</th><th data-k="nsrc">sources</th></tr>`+
+  rows.map(n=>`<tr data-id="${esc(n.id)}"><td class="mono">${esc(short(n.label))}${n.infra?' <span class="tag infra">infra</span>':''}</td><td>${esc(n.type)}</td><td>${(n.count||0).toLocaleString()}</td><td class="mono">${esc(ft(n.first,false))}</td><td>${n.nsrc}</td></tr>`).join('')+`</table>`;
+  $('#side').querySelectorAll('th').forEach(th=>th.onclick=()=>{if(sortK===th.dataset.k)dir=-dir;else{sortK=th.dataset.k;dir=-1}render()});
+  $('#side').querySelectorAll('tr[data-id]').forEach(tr=>tr.onclick=()=>{const o=N.get(tr.dataset.id);if(o.hidden)o.hidden=false;select(o)})};
+ rows.forEach(n=>n.nsrc=adj.get(n.id).length);render()}
+
+// ------------------------------------------------------------------ interaction
+let drag=null;
+svg.addEventListener('mousedown',e=>{const g=e.target.closest('.node');const p={x:e.clientX,y:e.clientY};
+ if(g){drag={n:g.__n,p,moved:false}}else{drag={pan:true,p,v:{...view}};svg.classList.add('drag')}});
+window.addEventListener('mousemove',e=>{if(!drag)return;const dx=e.clientX-drag.p.x,dy=e.clientY-drag.p.y;
+ if(drag.pan){view.x=drag.v.x+dx;view.y=drag.v.y+dy;applyView()}else{if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;if(drag.moved){drag.n.x+=dx/view.k;drag.n.y+=dy/view.k;drag.p={x:e.clientX,y:e.clientY};place()}}});
+window.addEventListener('mouseup',e=>{if(drag&&!drag.pan&&!drag.moved)select(drag.n);else if(drag&&drag.pan&&Math.abs(e.clientX-drag.p.x)+Math.abs(e.clientY-drag.p.y)<3){selected=null;draw();renderSide()}
+ drag=null;svg.classList.remove('drag')});
+svg.addEventListener('wheel',e=>{e.preventDefault();const r=svg.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;const f=Math.exp(-e.deltaY*0.0015);
+ view.x=mx-(mx-view.x)*f;view.y=my-(my-view.y)*f;view.k*=f;applyView()},{passive:false});
+function setPlaying(p){playing=p;$('#play').textContent=p?'❚❚ Pause':'▶ Play';$('#play').classList.toggle('on',p);clearInterval(timer);
+ if(p){if(cur>=T.length-1)cur=0;timer=setInterval(()=>{if(cur>=T.length-1){setPlaying(false);return}cur=nextStep(cur,1);draw();if(selected)renderSide()},1000/(+$('#speed').value))}}
+$('#play').onclick=()=>setPlaying(!playing);
+$('#stepf').onclick=()=>{setPlaying(false);cur=nextStep(cur,1);draw()};
+$('#stepb').onclick=()=>{setPlaying(false);cur=nextStep(cur,-1);draw()};
+$('#speed').onchange=()=>{if(playing)setPlaying(true)};
+function fitRange(center){
+ // keep the number of steps manageable: fine steps over a long case narrow the range around the cursor
+ STEP=+$('#gran').value;let r=+$('#range').value;const span=r?2*r:(T1-T0);
+ if(span/STEP>MAXSTEPS){const opts=[...$('#range').options].map(o=>+o.value).filter(v=>v&&2*v/STEP<=MAXSTEPS);
+  r=opts.length?Math.max(...opts):Math.floor(MAXSTEPS*STEP/2);if([...$('#range').options].some(o=>+o.value===r))$('#range').value=r}
+ RANGE=r?[center-r,center+r]:null}
+function reaxis(){const old=STEP,t=T[cur];fitRange(t+(old>+$('#gran').value?old/2:0));buildAxis();
+ let i=T.findIndex(x=>x>=stepOf(t));cur=i<0?T.length-1:i;buildTimeline();draw();renderSide()}
+$('#gran').onchange=reaxis;$('#range').onchange=reaxis;
+['#mode','#win','#infra','#minc'].forEach(s=>$(s).addEventListener('change',()=>{buildTimeline();draw()}));
+$('#q').addEventListener('input',draw);
+$('#local').onchange=e=>{LOCAL=e.target.checked;buildTimeline();draw();renderSide()};
+$('#fit').onclick=fit;$('#tableBtn').onclick=showTable;
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.key===' '){e.preventDefault();setPlaying(!playing)}
+ if(e.key==='ArrowRight')$('#stepf').click();if(e.key==='ArrowLeft')$('#stepb').click()});
+
+// ------------------------------------------------------------------ init
+$('#title').textContent=D.title;
+$('#meta').textContent=`${D.seeds.length} seed(s) · ${VN.filter(n=>n.type==='source').length} sources · ${VN.filter(n=>!n.seed&&n.type!=='source').length} entities · generated ${D.generated}${D.sanitized?' · SANITISED':''}`;
+$('#legend').innerHTML=['seed','source',...TYPES].map(t=>`<span><span class="dot" style="background:${COLORS[t]}"></span>${t}</span>`).join('')+(E.some(e=>e.kind==='cooccur')?'<span><svg width="18" height="6"><line x1="0" y1="3" x2="18" y2="3" stroke="#7b2fd3" stroke-width="2" stroke-dasharray="5 3"/></svg>seeds in the same event</span>':'');
+{const g=$('#gran');[...g.options].forEach(o=>{if(+o.value<(D.bin||3600))o.remove()});
+ g.value=(T1-T0)/3600<=MAXSTEPS?'3600':'86400'}
+fitRange(T1);buildAxis();layout();place();cur=T.length-1;buildTimeline();draw();renderSide();requestAnimationFrame(fit);
+window.addEventListener('resize',()=>{buildTimeline();drawCursor()});
+</script></body></html>

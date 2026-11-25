@@ -1,0 +1,8 @@
+# Web app and command-line tools. Payload Analyzer (payload_analyzer/) needs only the standard library.
+flask>=2.0,<2.3
+werkzeug>=2.0,<2.3
+waitress>=2.1
+requests>=2.26
+psutil>=5.9
+openpyxl>=3.1
+windows-curses>=2.3; sys_platform == "win32"

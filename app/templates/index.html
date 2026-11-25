@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}splunk>voyager Dashboard{% endblock %}
+
+{% block content %}
+<div class="section">
+    <h1 class="section-title">Dashboard</h1>
+    
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Welcome to splunk><span class="logo-voyager">voyager</span></h2>
+        </div>
+        <div class="card-body">
+            <p>splunk><span class="logo-voyager">voyager</span> is a custom dashboard framework for Splunk that provides enhanced visualization capabilities.</p>
+            <p>Use the sections below to manage your sessions and execute queries.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2 class="section-title">Active Sessions</h2>
+        
+        <div id="active-sessions-list" class="row">
+            {# Content will be loaded here by JavaScript #}
+            <p>Loading active sessions...</p> {# Optional initial message #}
+            <div class="spinner"></div> {# Optional spinner #}
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2 class="section-title">Getting Started</h2>
+        
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Installation Steps</h3>
+            </div>
+            <div class="card-body">
+                <ol>
+                    <li>
+						<p><strong>Install the Userscript:</strong></p>
+						<p>
+							You need the <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer">Tampermonkey BETA</a> browser extension (identifiable by its <strong>red icon</strong>) to run this script. 
+							Install Tampermonkey BETA, then install the SplunkVoyager Cookie Extractor script below.
+						</p>
+						<p>Set your Splunk URL in <a href="{{ url_for('workbench.settings_page') }}">Settings</a> first; the script is generated for it.</p>
+						<p><a href="{{ url_for('workbench.userscript') }}" class="btn" target="_blank" rel="noopener noreferrer">Install the Voyager session bridge</a></p>
+					</li>
+                    <li>
+                        <p><strong>Visit Your Splunk Instance:</strong></p>
+                        <p>Navigate to your Splunk instance with the userscript installed. The script will automatically extract cookies and send them to SplunkVoyager.</p>
+                    </li>
+                    <li>
+                        <p><strong>Start an investigation:</strong></p>
+                        <p>Once your session is active, open <a href="{{ url_for('workbench.investigations_page') }}">Investigations</a> to run the network analysis and the entity mapper.</p>
+                    </li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

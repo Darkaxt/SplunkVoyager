@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Investigations · Voyager{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/workbench.css') }}">{% endblock %}
+{% block content %}
+<div class="wb">
+  <h1>Investigations</h1>
+  <div class="sub">Each investigation has a time range and runs the network analysis (Payload Analyzer) and the entity mapper on it, side by side.</div>
+  {% if not settings.splunk_base %}
+  <div class="note warn">Set your Splunk URL in <a href="{{ url_for('workbench.settings_page') }}">Settings</a> before starting any analysis.</div>
+  {% endif %}
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>New investigation</h2>
+      <label class="f">Name</label>
+      <input type="text" id="n-name" placeholder="e.g. Admin account compromise">
+      <div class="row">
+        <div><label class="f">Earliest</label><input type="text" id="n-earliest" placeholder="2026-10-15 or -30d"></div>
+        <div><label class="f">Latest</label><input type="text" id="n-latest" placeholder="now"></div>
+      </div>
+      <div class="hint">Dates as YYYY-MM-DD or YYYY-MM-DDTHH:MM (this computer's time), or relative like -7d, -12h@h, now.</div>
+      <label class="f">Notes (optional)</label>
+      <textarea id="n-notes" rows="2" style="font-family:inherit"></textarea>
+      <div class="actions"><button class="primary" id="n-create">Create</button><span class="err" id="n-err"></span></div>
+    </div>
+    <div class="panel">
+      <h2>How it works</h2>
+      <ol style="margin-left:18px;color:#c9d1d9;line-height:1.7">
+        <li><b>Network analysis</b>: give the base search for your web or WAF logs. Voyager splits the time range into windows, exports the request groups from Splunk, merges them and runs Payload Analyzer: injection attempts, campaigns, report.</li>
+        <li><b>Entity mapper</b>: search any value (an attacker address, a callback host, an account) across all indexes, then see which sources it appears in and how its relations evolve over time.</li>
+        <li>Findings from the network analysis can be sent to the entity mapper with one click. Both run in the background; closing the browser or restarting Voyager doesn't stop them.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="full">
+    <h2 style="margin-top:22px">Your investigations</h2>
+    <div class="cards" id="inv-list"><div class="empty">Loading...</div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/workbench.js') }}"></script>
+<script>WB.listPage();</script>
+{% endblock %}

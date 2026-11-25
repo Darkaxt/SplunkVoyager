@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Settings · Voyager{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/workbench.css') }}">{% endblock %}
+{% block content %}
+<div class="wb">
+  <h1>Settings</h1>
+  <div class="sub">Stored in data/settings.json on this computer. Environment variables (SPLUNK_BASE, SPLUNK_LOCALE, SPLUNK_APP, VOYAGER_URL) override them.</div>
+  <div class="grid2">
+    <div class="panel">
+      <h2>Splunk</h2>
+      <label class="f">Splunk Web URL</label>
+      <input type="text" id="s-base" value="{{ settings.splunk_base }}" placeholder="https://splunk.example.com">
+      <div class="hint">The address you open in the browser (Splunk Web), without the locale part.</div>
+      <div class="row">
+        <div><label class="f">Locale in URLs</label><input type="text" id="s-locale" value="{{ settings.splunk_locale }}" placeholder="en-US"></div>
+        <div><label class="f">App context</label><input type="text" id="s-app" value="{{ settings.splunk_app }}" placeholder="(your default app)"></div>
+      </div>
+      <div class="hint">Locale: the part after the host in Splunk URLs, e.g. en-GB in /en-GB/app/search. App: where searches run, so your macros and lookups resolve.</div>
+      <div class="row">
+        <div><label class="f">Splunk searches per module at once</label><input type="number" id="s-max" min="1" max="10" value="{{ settings.max_jobs }}"></div>
+        <div><label class="f">This app's address (for the exporter)</label><input type="text" id="s-vurl" value="{{ settings.voyager_url }}"></div>
+      </div>
+      <div class="hint">Both analyses can run at once, so Splunk sees up to twice the per-module number. Stay under your search quota.</div>
+      <div class="actions"><button class="primary" id="s-save">Save</button><span class="sub" id="s-msg"></span></div>
+    </div>
+    <div class="panel">
+      <h2>Browser session bridge</h2>
+      <p style="color:#c9d1d9">Voyager uses your browser's Splunk session (single sign-on included); it never sees your password.
+        A userscript in Tampermonkey sends the session cookies to this app while a Splunk tab is open.</p>
+      <ol style="margin:10px 0 0 18px;color:#c9d1d9;line-height:1.7">
+        <li>Install <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a> (the BETA build is needed for HTTP-only cookies).</li>
+        <li>Save the Splunk URL here, then <a href="{{ url_for('workbench.userscript') }}" target="_blank">install the userscript</a>. It only runs on your Splunk URL.</li>
+        <li>Open any Splunk page. The session appears in the header of this app within 30 seconds.</li>
+        <li>For long runs, open one Splunk tab with <span class="mono">#voyager</span> at the end of its URL: that tab becomes the keep-alive tab and reloads itself when the session expires.</li>
+      </ol>
+      <div class="note">Voyager listens on this computer only. It refuses requests from other web pages, except the session cookies from your Splunk URL.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/workbench.js') }}"></script>
+<script>WB.settingsPage();</script>
+{% endblock %}

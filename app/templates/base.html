@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SplunkVoyager{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header class="header">
+		<div class="header-container">
+			<div class="logo">
+                <a href="{{ url_for('views.index') }}">
+                    <span class="logo-splunk">splunk></span><span class="logo-voyager">voyager</span>
+                </a>
+            </div>
+			<nav>
+				<ul class="nav">
+					<li class="nav-item"><a href="{{ url_for('workbench.investigations_page') }}">Investigations</a></li>
+					<li class="nav-item"><a href="{{ url_for('views.query') }}">Query</a></li>
+					<li class="nav-item"><a href="{{ url_for('workbench.settings_page') }}">Settings</a></li>
+					<li class="nav-item user-dropdown">
+						{% if current_user %}
+						<a href="#" class="user-dropdown-toggle" id="user-dropdown-toggle-link">
+							<span class="material-symbols-outlined">account_circle</span>
+							<span id="user-dropdown-username">{{ current_user.username }}</span>
+							<span class="dropdown-arrow">▼</span>
+						</a>
+						<div class="dropdown-menu">
+							<div class="dropdown-header">Switch Account</div>
+							<div id="user-dropdown-session-list">
+								<!-- Session links will be inserted here by JS -->
+							</div>
+							<div class="dropdown-divider"></div>
+							<a href="{{ url_for('views.session_detail', session_id=current_user.session_id) }}" id="user-dropdown-session-details-link">Session Details</a> {# Added ID #}
+						</div>
+						{% else %}
+						<a href="#" class="user-dropdown-toggle warning-text">
+							No Active Session <span class="dropdown-arrow">▼</span>
+						</a>
+						<div class="dropdown-menu">
+							<div class="dropdown-header warning-text">Session Warning</div>
+							<div class="dropdown-message">
+								No active sessions available. Your Splunk session may have expired.
+							</div>
+							<div class="dropdown-divider"></div>
+							<a href="{{ url_for('views.sessions') }}">Manage Sessions</a>
+						</div>
+						{% endif %}
+					</li>
+				</ul>
+			</nav>
+		</div>
+	</header>
+
+    <main class="main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

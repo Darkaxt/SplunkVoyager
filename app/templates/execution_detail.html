@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{# --- Title updated --- #}
+{% block title %}SplunkVoyager - Query Execution Results{% endblock %}
+
+{% block content %}
+<div class="section">
+    {# --- Title updated --- #}
+    <h1 class="section-title">Query Execution Results</h1>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">
+                {# --- Use execution.status --- #}
+                {% if execution.status == 'completed' %}
+                    <span class="status-indicator status-active" title="Completed"></span>
+                {% elif execution.status == 'pending' or execution.status == 'running' %}
+                    <span class="status-indicator status-pending" title="{{ execution.status|capitalize }}"></span>
+                {% else %}
+                    <span class="status-indicator status-inactive" title="{{ execution.status|capitalize }}"></span>
+                {% endif %}
+                Execution Details (ID: {{ execution.execution_id }})
+            </h2>
+        </div>
+        <div class="card-body">
+             {# --- Use original grid layout --- #}
+            <div class="details-grid">
+                <div class="detail-item">
+                    <div class="detail-label">Status:</div>
+                    <div class="detail-value">{{ execution.status }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Session:</div>
+                    <div class="detail-value">
+                        <a href="{{ url_for('views.session_detail', session_id=execution.session_id) }}">
+                             {{ execution.domain }} (User: {{ execution.username }}) {# Show domain & user #}
+                        </a>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Time Range:</div>
+                    <div class="detail-value">
+                        {% if execution.earliest_time or execution.latest_time %}
+                             {{ execution.earliest_time or '-24h@h' }} to {{ execution.latest_time or 'now' }} {# Use original defaults #}
+                        {% else %}
+                            Default
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Started:</div> {# Renamed label #}
+                    <div class="detail-value date-format">{{ execution.created_at }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Completed:</div>
+                    <div class="detail-value date-format">{{ execution.completed_at or '-' }}</div>
+                </div>
+                 <div class="detail-item">
+                    <div class="detail-label">Definition ID:</div> {# Added Definition ID #}
+                    <div class="detail-value">{{ execution.query_definition_id }}</div>
+                </div>
+            </div>
+
+            <div class="query-box" style="margin-top: 1.5rem;">
+                <h3>Query Text:</h3> {# Changed label #}
+                <pre class="query-code">{{ execution.query_text }}</pre>
+            </div>
+
+            <div class="actions" style="margin-top: 1.5rem;">
+                <button id="rerun-query-btn" class="btn btn-success"
+                        data-query-text="{{ execution.query_text }}"
+                        data-domain="{{ execution.domain }}"
+                        data-earliest="{{ execution.earliest_time or '' }}"
+                        data-latest="{{ execution.latest_time or '' }}"
+						data-definition-id="{{ execution.query_definition_id }}">
+                    Re-run Query
+                </button>
+                <a href="{{ url_for('views.query') }}?domain={{ execution.domain }}" class="btn">
+                    New Query
+                </a>
+                <button id="delete-execution-btn" class="btn btn-danger" data-execution-id="{{ execution.execution_id }}"> {# Updated ID/attribute #}
+                    Delete Execution {# Updated text #}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Results</h2>
+
+        {% if execution.status == 'completed' and execution.results is not none %}
+            <div class="results-container">
+                <div id="results-data" class="results-data">
+                    <!-- Results will be inserted here by JavaScript -->
+                    <div class="spinner" id="results-loading"></div>
+                </div>
+            </div>
+             {# --- Use original export button structure --- #}
+            <div id="export-options-container" class="export-options" style="margin-top: 1rem;">
+                <button id="export-json-btn" class="btn-sm">Export JSON</button>
+                <button id="export-csv-btn" class="btn-sm">Export CSV</button>
+                <button id="export-xlsx-btn" class="btn-sm">Export XLSX</button>
+                <button id="copy-results-btn" class="btn-sm">Copy to Clipboard</button>
+            </div>
+
+        {% elif execution.status == 'pending' or execution.status == 'running' %} {# Use original pending block structure #}
+            <div class="card">
+                <div class="card-body">
+                    <p>Query execution is {{ execution.status }}. Please check back later or refresh.</p>
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        {% else %} {# Use original failure block structure #}
+            <div class="card">
+                <div class="card-body"> {# Removed error-card class #}
+                     <p>No results available or execution failed.</p> {# Simplified message #}
+                    {% if execution.status == 'failed' %}
+                         {% if execution.results and execution.results.error %}
+                            <p><strong>Error Details:</strong></p>
+                            {# Display error simply in pre tag #}
+                            <pre style="color: #e74c3c; background-color: #fceded; padding: 5px; border-radius: 3px; white-space: pre-wrap; word-break: break-all;">{{ execution.results.error }}</pre>
+                         {% else %}
+                            <p>The query execution failed. Please check logs or try again.</p>
+                         {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Define the global JS variable using Jinja - results are already parsed by backend if possible
+  const queryResultsData = {{ execution.results|tojson|safe if execution.results is not none else 'null' }};
+  
+  // Pass template variables to external JS
+  window.executionDetailConfig = {
+    executionId: "{{ execution.execution_id }}",
+    definitionId: "{{ execution.query_definition_id }}",
+    sessionId: "{{ execution.session_id }}",
+    domain: "{{ execution.domain }}",
+    status: "{{ execution.status }}",
+    sessionDetailUrl: "{{ url_for('views.session_detail', session_id=execution.session_id) }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/execution_detail.js') }}"></script>
+{% endblock %}

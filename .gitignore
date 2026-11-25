@@ -1,0 +1,18 @@
+# local state: sessions, cookies, settings, investigations, exports
+data/
+debug/
+cases/
+exports/
+*.db
+*.db-journal
+.env
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,3 @@
+"""
+SplunkVoyager Terminal Monitor package
+"""

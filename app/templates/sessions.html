@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}SplunkVoyager - Sessions{% endblock %}
+
+{% block content %}
+<div class="section">
+    <h1 class="section-title">Session Management</h1>
+    
+    <div class="tabs">
+        <div class="tab active" data-tab="active">Active Sessions</div>
+        <div class="tab" data-tab="all">All Sessions</div>
+    </div>
+    
+    <div id="active" class="tab-content active">
+        <h2 class="section-title">Active Sessions</h2>
+        
+        {% set active_found = false %}
+        {% for session in sessions %}
+            {% if session.is_active %}
+                {% set active_found = true %}
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <span class="status-indicator status-active"></span>
+                            {{ session.domain }}
+                        </h3>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Username:</strong> {{ session.username }}</p>
+                        <p><strong>Last Active:</strong> {{ session.last_active }}</p>
+                        <p><strong>Created:</strong> {{ session.created_at }}</p>
+                    </div>
+                    <div class="card-footer">
+                        <a href="{{ url_for('views.session_detail', session_id=session.id) }}" class="btn">View Details</a>
+                        <a href="{{ url_for('views.query') }}?domain={{ session.domain }}" class="btn btn-success">Execute Query</a>
+                        <button class="btn btn-danger" data-action="invalidate" data-session-id="{{ session.id }}">Invalidate</button>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+        
+        {% if not active_found %}
+            <div class="card">
+                <div class="card-body">
+                    <p>No active sessions available. Install the userscript to extract cookies from Splunk.</p>
+                    <p>Once installed, visit your Splunk instance and the cookies will automatically be sent to SplunkVoyager.</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    
+    <div id="all" class="tab-content">
+        <h2 class="section-title">All Sessions</h2>
+        
+        {% if sessions %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Domain</th>
+                        <th>Username</th>
+                        <th>Last Active</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                        <tr>
+                            <td>
+                                {% if session.is_active %}
+                                    <span class="status-indicator status-active" title="Active"></span>
+                                {% else %}
+                                    <span class="status-indicator status-inactive" title="Inactive"></span>
+                                {% endif %}
+                            </td>
+                            <td>{{ session.domain }}</td>
+                            <td>{{ session.username }}</td>
+                            <td>{{ session.last_active }}</td>
+                            <td>{{ session.created_at }}</td>
+                            <td>
+                                <a href="{{ url_for('views.session_detail', session_id=session.id) }}" class="btn">Details</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="card">
+                <div class="card-body">
+                    <p>No sessions available.</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/sessions.js') }}"></script>
+{% endblock %}

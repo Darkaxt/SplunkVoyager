@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}SplunkVoyager - Query Execution{% endblock %}
+
+{% block content %}
+<div class="section">
+    <h1 class="section-title">Execute Splunk Query</h1>
+    
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Query Editor</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label for="domain-select" class="form-label">Select Domain:</label>
+                <select id="domain-select" class="form-control">
+                    <option value="">-- Select a domain --</option>
+                    {% for domain in domains %}
+                        <option value="{{ domain.domain }}" data-session-id="{{ domain.session_id }}">
+                            {{ domain.domain }} ({{ domain.username }})
+                        </option>
+                    {% endfor %}
+                </select>
+                <p class="form-help">Select the Splunk domain to execute the query against.</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="query-text" class="form-label">SPL Query:</label>
+                <textarea id="query-text" class="query-editor" placeholder="Enter your SPL query here..."></textarea>
+                <p class="form-help">Enter your Splunk Processing Language (SPL) query.</p>
+            </div>
+            
+            <div class="form-group form-row">
+                <div class="form-col">
+                    <label for="time-range" class="form-label">Predefined Time Range:</label>
+                    <select id="time-range" class="form-control">
+                        <option value="">-- Custom --</option>
+                        <option value="rt">Real-time (rt)</option>
+                        <option value="-15m">Last 15 minutes</option>
+                        <option value="-1h">Last 1 hour</option>
+                        <option value="-4h">Last 4 hours</option>
+                        <option value="-24h">Last 24 hours</option>
+                        <option value="-7d">Last 7 days</option>
+                        <option value="-30d">Last 30 days</option>
+                        <option value="@d">Today</option>
+                        <option value="@w">This week</option>
+                        <option value="@m">This month</option>
+                    </select>
+                    <p class="form-help">Select a predefined time range or specify custom times below.</p>
+                </div>
+            </div>
+            
+            <div class="form-group" style="display: flex; gap: 20px;">
+                <div style="flex: 1;">
+                    <label for="earliest-time" class="form-label">Earliest Time:</label>
+                    <div class="input-group">
+                        <input type="text" id="earliest-time" class="form-control" placeholder="-24h">
+                        <button id="earliest-time-picker-btn" class="btn btn-outline">
+                            <i class="icon-calendar"></i>
+                        </button>
+                    </div>
+                    <div id="earliest-time-picker" class="datetime-picker-container hidden">
+                        <div class="datetime-picker">
+                            <div class="datetime-picker-header">
+                                <button id="earliest-time-picker-close" class="btn btn-sm">×</button>
+                            </div>
+                            <div class="datetime-picker-body">
+                                <div class="datetime-picker-date">
+                                    <label>Date:</label>
+                                    <input type="date" id="earliest-date" class="form-control">
+                                </div>
+                                <div class="datetime-picker-time">
+                                    <label>Time:</label>
+                                    <input type="time" id="earliest-time-input" class="form-control">
+                                </div>
+                                <div class="datetime-picker-relative">
+                                    <label>Relative:</label>
+                                    <select id="earliest-relative" class="form-control">
+                                        <option value="">-- Select --</option>
+                                        <option value="-15m">15 minutes ago</option>
+                                        <option value="-1h">1 hour ago</option>
+                                        <option value="-4h">4 hours ago</option>
+                                        <option value="-24h">24 hours ago</option>
+                                        <option value="-7d">7 days ago</option>
+                                        <option value="-30d">30 days ago</option>
+                                        <option value="@d">Start of day</option>
+                                        <option value="@w">Start of week</option>
+                                        <option value="@m">Start of month</option>
+                                    </select>
+                                </div>
+                                <button id="earliest-time-apply" class="btn btn-success">Apply</button>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="form-help">Examples: -24h, -7d, 04/15/2025:12:00:00</p>
+                </div>
+                <div style="flex: 1;">
+                    <label for="latest-time" class="form-label">Latest Time:</label>
+                    <div class="input-group">
+                        <input type="text" id="latest-time" class="form-control" placeholder="now">
+                        <button id="latest-time-picker-btn" class="btn btn-outline">
+                            <i class="icon-calendar"></i>
+                        </button>
+                    </div>
+                    <div id="latest-time-picker" class="datetime-picker-container" style="display: none;">
+                        <div class="datetime-picker">
+                            <div class="datetime-picker-header">
+                                <button id="latest-time-picker-close" class="btn btn-sm">×</button>
+                            </div>
+                            <div class="datetime-picker-body">
+                                <div class="datetime-picker-date">
+                                    <label>Date:</label>
+                                    <input type="date" id="latest-date" class="form-control">
+                                </div>
+                                <div class="datetime-picker-time">
+                                    <label>Time:</label>
+                                    <input type="time" id="latest-time-input" class="form-control">
+                                </div>
+                                <div class="datetime-picker-relative">
+                                    <label>Relative:</label>
+                                    <select id="latest-relative" class="form-control">
+                                        <option value="">-- Select --</option>
+                                        <option value="now">Now</option>
+                                        <option value="+15m">15 minutes from now</option>
+                                        <option value="+1h">1 hour from now</option>
+                                        <option value="@d+1d">End of day</option>
+                                        <option value="@w+1w">End of week</option>
+                                        <option value="@m+1m">End of month</option>
+                                    </select>
+                                </div>
+                                <button id="latest-time-apply" class="btn btn-success">Apply</button>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="form-help">Examples: now, +1h, 04/16/2025:12:00:00</p>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <button id="execute-query-btn" class="btn btn-success">Execute Query</button>
+                <button id="clear-results-btn" class="btn">Clear Results</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="query-results" class="results-container" style="display: none;">
+        <h2 class="results-title">Query Results</h2>
+        <div id="results-metadata">
+            <p><strong>Status:</strong> <span id="result-status">Pending</span></p>
+            <p><strong>Query ID:</strong> <span id="result-query-id">-</span></p>
+            <p><strong>Executed at:</strong> <span id="result-timestamp">-</span></p>
+        </div>
+        <div id="results-data" class="results-data">
+            <!-- Results will be inserted here -->
+        </div>
+    </div>
+    
+    <div id="loading-indicator" style="display: none; text-align: center; margin: 2rem 0;">
+        <p>Executing query, please wait...</p>
+        <div class="spinner"></div>
+    </div>
+    
+    <div id="error-message" class="card" style="display: none; border-color: #e74c3c;">
+        <div class="card-header" style="background-color: #e74c3c; color: white;">
+            <h3 class="card-title">Error</h3>
+        </div>
+        <div class="card-body">
+            <p id="error-text"></p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2 class="section-title">Recent Queries</h2>
+        <div id="recent-queries">
+            <!-- Recent queries will be inserted here -->
+            <p>Select a domain to see recent queries.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/query.js') }}"></script>
+{% endblock %}
+
+{% block extra_css %}
+{% endblock %}

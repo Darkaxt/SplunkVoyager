@@ -1,0 +1,201 @@
+// ==UserScript==
+// @name         Voyager session bridge
+// @namespace    http://splunkvoyager.local/
+// @version      0.4
+// @description  Extract Splunk cookies (including HTTP-only) and send to local backend; keep-alive tab reloads on request
+// @author       SplunkVoyager
+// @match        __MATCH__
+// @grant        GM.cookie
+// @grant        GM_cookie
+// @run-at       document-start
+// ==/UserScript==
+
+console.log("SplunkVoyager: Script initialized");
+
+(function() {
+    'use strict';
+
+    // Configuration
+    const backendUrl = '__BACKEND__/api/receive_cookies';
+
+    // Keep-alive tab: open any Splunk page with #voyager at the end of the URL once. The mark is kept in
+    // sessionStorage, so it survives reloads and SSO redirects in that tab. Only that tab is ever reloaded.
+    const KEY = 'splunkVoyagerKeepalive';
+    try {
+        if (location.hash.toLowerCase().includes('voyager')) sessionStorage.setItem(KEY, '1');
+    } catch (e) {}
+    const isKeepalive = () => { try { return sessionStorage.getItem(KEY) === '1'; } catch (e) { return false; } };
+    if (isKeepalive()) document.title = '[keep-alive] ' + document.title;
+
+    // Function to get all cookies using GM_cookie or GM.cookie (supporting HTTP-only cookies)
+    async function getAllCookies() {
+        // Try to use the new API first (with Promise)
+        if (typeof GM !== 'undefined' && GM.cookie) {
+            try {
+                console.log("SplunkVoyager: Using GM.cookie API");
+                return await GM.cookie.list({ url: window.location.href });
+            } catch (error) {
+                console.error("SplunkVoyager: Error using GM.cookie:", error);
+            }
+        }
+
+        // Fall back to the older callback-style API
+        if (typeof GM_cookie !== 'undefined') {
+            console.log("SplunkVoyager: Using GM_cookie API");
+            return new Promise((resolve, reject) => {
+                GM_cookie.list({ url: window.location.href }, (cookies, error) => {
+                    if (error) {
+                        console.error("SplunkVoyager: Error getting cookies:", error);
+                        reject(error);
+                    } else {
+                        resolve(cookies);
+                    }
+                });
+            });
+        }
+
+        // Fall back to standard JS cookies if neither API is available
+        console.log("SplunkVoyager: Falling back to standard JS cookies (HTTP-only cookies will not be included)");
+        const jsrCookies = getJSCookies();
+
+        // Convert JS cookies to array format similar to GM_cookie output
+        return Object.entries(jsrCookies).map(([name, value]) => ({
+            name,
+            value,
+            domain: window.location.hostname,
+            path: '/',
+            httpOnly: false, // These are JS accessible, so not HTTP-only
+            secure: window.location.protocol === 'https:',
+            session: true
+        }));
+    }
+
+    // Function to get standard JS cookies (fallback)
+    function getJSCookies() {
+        const cookies = {};
+        document.cookie.split(';').forEach(cookie => {
+            const [name, value] = cookie.trim().split('=').map(part => part.trim());
+            if (name) cookies[name] = value;
+        });
+        return cookies;
+    }
+
+    // Function to send data to our backend
+    async function sendDataToBackend() {
+        console.log("SplunkVoyager: Extracting cookies...");
+
+        try {
+            const domain = window.location.hostname;
+            const cookiesList = await getAllCookies();
+
+            // Convert cookies to a more readable object format
+            const cookies = {};
+            cookiesList.forEach(cookie => {
+                cookies[cookie.name] = {
+                    value: cookie.value,
+                    httpOnly: cookie.httpOnly || false,
+                    secure: cookie.secure || false,
+                    domain: cookie.domain,
+                    path: cookie.path,
+                    expirationDate: cookie.expirationDate,
+                    sameSite: cookie.sameSite
+                };
+            });
+
+            console.log(`SplunkVoyager: Found ${Object.keys(cookies).length} cookies for ${domain}`);
+
+            // Count how many are HTTP-only
+            const httpOnlyCount = cookiesList.filter(c => c.httpOnly).length;
+            console.log(`SplunkVoyager: Including ${httpOnlyCount} HTTP-only cookies`);
+
+            // Prepare the payload
+            const payload = {
+                domain: domain,
+                url: window.location.href,
+                cookies: cookies,
+                keepalive: isKeepalive(),
+                timestamp: new Date().toISOString()
+            };
+
+            // Send to backend
+            console.log(`SplunkVoyager: Sending cookies to ${backendUrl}`);
+
+            const response = await fetch(backendUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            console.log(`SplunkVoyager: Data sent successfully:`, data);
+            if (data && data.reload && isKeepalive()) {
+                console.log('SplunkVoyager: backend asked for a session refresh, reloading this keep-alive tab');
+                setTimeout(() => location.reload(), 500);
+                return;
+            }
+
+            // Update indicator if it exists
+            const indicator = document.getElementById('splunk-voyager-indicator');
+            if (indicator) {
+                indicator.style.backgroundColor = 'green';
+                indicator.title = `SplunkVoyager Active - ${Object.keys(cookies).length} cookies extracted` +
+                    (isKeepalive() ? ' (keep-alive tab)' : '');
+                if (isKeepalive()) indicator.style.outline = '2px solid #7b2fd3';
+            }
+
+        } catch (error) {
+            console.error(`SplunkVoyager: Error sending data:`, error);
+
+            // Update indicator to show error
+            const indicator = document.getElementById('splunk-voyager-indicator');
+            if (indicator) {
+                indicator.style.backgroundColor = 'red';
+                indicator.title = 'SplunkVoyager Error - Check console';
+            }
+        }
+    }
+
+    // Add a visual indicator
+    function addIndicator() {
+        console.log("SplunkVoyager: Adding visual indicator");
+
+        // Check if indicator already exists
+        if (document.getElementById('splunk-voyager-indicator')) return;
+
+        const indicator = document.createElement('div');
+        indicator.id = 'splunk-voyager-indicator';
+        indicator.style.position = 'fixed';
+        indicator.style.bottom = '5px';
+        indicator.style.right = '5px';
+        indicator.style.width = '15px';
+        indicator.style.height = '15px';
+        indicator.style.borderRadius = '50%';
+        indicator.style.backgroundColor = 'orange'; // Start with orange (in progress)
+        indicator.style.opacity = '0.7';
+        indicator.style.zIndex = '9999';
+        indicator.title = 'SplunkVoyager Initializing...';
+        document.body.appendChild(indicator);
+    }
+
+    // Run initially with slight delay to ensure everything is loaded
+    console.log("SplunkVoyager: Scheduling initial extraction");
+    setTimeout(sendDataToBackend, 1000);
+
+    // Run again when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("SplunkVoyager: DOM loaded, extracting cookies again");
+            addIndicator();
+            sendDataToBackend();
+        });
+    } else {
+        // DOM already loaded
+        addIndicator();
+        sendDataToBackend();
+    }
+
+    // Set up periodic extraction
+    setInterval(sendDataToBackend, 30000);
+})();

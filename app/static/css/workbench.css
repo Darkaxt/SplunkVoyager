@@ -1,0 +1,60 @@
+/* Investigations GUI (scoped to .wb so the older pages keep their own styles) */
+.wb { --bg:#1e1f22; --panel:#26282c; --panel2:#2d3035; --line:#3a3d43; --text:#e3e5e8; --muted:#9aa0a6;
+      --accent:#5aa9e6; --ok:#3fb27f; --warn:#e0a030; --bad:#e5534b; --purple:#a371f7;
+      color:var(--text); max-width:1400px; margin:0 auto; padding:18px 20px 60px; font-size:14px; }
+.wb h1 { font-size:22px; font-weight:600; margin:0 0 4px; color:var(--text); }
+.wb h2 { font-size:16px; font-weight:600; margin:0 0 10px; color:var(--text); }
+.wb h3 { font-size:13px; font-weight:600; margin:14px 0 6px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+.wb a { color:var(--accent); text-decoration:none; } .wb a:hover { text-decoration:underline; }
+.wb .sub { color:var(--muted); font-size:13px; }
+.wb .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+@media (max-width:1000px){ .wb .grid2 { grid-template-columns:1fr; } }
+.wb .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; }
+.wb > .panel + .panel { margin-top:16px; }
+.wb .full { margin-top:16px; }
+.wb label.f { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+.wb input[type=text], .wb input[type=number], .wb select, .wb textarea {
+  width:100%; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:5px;
+  padding:7px 9px; font:inherit; }
+.wb textarea { font-family:Consolas, "SFMono-Regular", Menlo, monospace; font-size:12.5px; min-height:64px; resize:vertical; }
+.wb input:focus, .wb textarea:focus, .wb select:focus { outline:none; border-color:var(--accent); }
+.wb .row { display:flex; gap:10px; } .wb .row > * { flex:1; min-width:0; }
+.wb .hint { color:var(--muted); font-size:12px; margin-top:3px; }
+.wb button, .wb .b { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:5px;
+  padding:6px 12px; font:inherit; font-size:13px; cursor:pointer; white-space:nowrap; }
+.wb button:hover, .wb .b:hover { border-color:var(--accent); text-decoration:none; }
+.wb button.primary { background:var(--accent); border-color:var(--accent); color:#0d1b26; font-weight:600; }
+.wb button.danger:hover { border-color:var(--bad); color:var(--bad); }
+.wb button:disabled { opacity:.5; cursor:default; }
+.wb .actions { display:flex; gap:8px; align-items:center; margin-top:14px; flex-wrap:wrap; }
+.wb details summary { cursor:pointer; color:var(--muted); font-size:12.5px; margin-top:10px; }
+.wb pre, .wb .mono { font-family:Consolas, "SFMono-Regular", Menlo, monospace; font-size:12px; }
+.wb pre.spl { background:var(--bg); border:1px solid var(--line); border-radius:5px; padding:8px; white-space:pre-wrap; color:#c9d1d9; margin-top:6px; }
+.wb pre.log { background:#111214; border:1px solid var(--line); border-radius:5px; padding:8px; max-height:340px; overflow:auto;
+  white-space:pre-wrap; color:#c9d1d9; margin:8px 0 0; }
+.wb table.t { width:100%; border-collapse:collapse; font-size:13px; }
+.wb table.t th { text-align:left; color:var(--muted); font-weight:500; font-size:12px; padding:6px 8px; border-bottom:1px solid var(--line); }
+.wb table.t td { padding:6px 8px; border-bottom:1px solid #303338; vertical-align:top; }
+.wb table.t tr:hover td { background:#2a2c31; }
+.wb .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11.5px; font-weight:600; background:var(--panel2); color:var(--muted); }
+.wb .badge.running, .wb .badge.queued { background:#1d3b55; color:#8cc8f5; }
+.wb .badge.waiting { background:#463a1a; color:#f0c674; }
+.wb .badge.done { background:#173c2c; color:#6fd3a3; }
+.wb .badge.failed { background:#4a1e1c; color:#ff8a84; }
+.wb .badge.interrupted, .wb .badge.stopped { background:#3d3020; color:#e0a030; }
+.wb .badge.cat { background:#2f2640; color:#c4a5f9; margin:0 3px 3px 0; font-weight:500; }
+.wb .bar { height:6px; background:var(--bg); border-radius:3px; overflow:hidden; margin-top:5px; width:160px; }
+.wb .bar > i { display:block; height:100%; background:var(--accent); }
+.wb .empty { color:var(--muted); padding:10px 0; }
+.wb .err { color:var(--bad); font-size:13px; margin-top:8px; }
+.wb .note { background:#2a2f37; border-left:3px solid var(--accent); padding:8px 12px; border-radius:4px; color:#c9d1d9; font-size:13px; margin-top:10px; }
+.wb .note.warn { border-left-color:var(--warn); }
+.wb .pill { display:inline-block; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:2px 10px; margin:0 6px 6px 0; font-size:12.5px; }
+.wb .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; margin-top:14px; }
+.wb .card2 { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; display:block; color:var(--text); }
+.wb .card2:hover { border-color:var(--accent); text-decoration:none; }
+.wb .muted { color:var(--muted); }
+.wb .right { text-align:right; }
+.wb .nowrap { white-space:nowrap; }
+.wb .ellip { max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wb .toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }

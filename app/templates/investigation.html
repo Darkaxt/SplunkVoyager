@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ inv.name }} · Voyager{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/workbench.css') }}">{% endblock %}
+{% block content %}
+<div class="wb" id="wb" data-slug="{{ inv.slug }}">
+  <div class="toolbar">
+    <div>
+      <div class="sub"><a href="{{ url_for('workbench.investigations_page') }}">Investigations</a> /</div>
+      <h1 id="inv-name">{{ inv.name }}</h1>
+      <div class="sub">
+        Time range <span class="mono" id="inv-range">{{ inv.earliest }} → {{ inv.latest }}</span>
+        · <a href="#" id="edit-range">change</a>
+        {% if inv.notes %} · {{ inv.notes }}{% endif %}
+      </div>
+    </div>
+  </div>
+  <div id="range-editor" class="panel" style="display:none;margin-top:10px">
+    <div class="row">
+      <div><label class="f">Earliest</label><input type="text" id="r-earliest" value="{{ inv.earliest }}"></div>
+      <div><label class="f">Latest</label><input type="text" id="r-latest" value="{{ inv.latest }}"></div>
+    </div>
+    <div class="hint">Used as the default for new runs. Runs already started keep their own range.</div>
+    <div class="actions"><button class="primary" id="r-save">Save</button><button id="r-cancel">Cancel</button></div>
+  </div>
+  {% if not settings.splunk_base %}
+  <div class="note warn">Set your Splunk URL in <a href="{{ url_for('workbench.settings_page') }}">Settings</a> before starting any analysis.</div>
+  {% endif %}
+
+  <div class="grid2">
+    <!-- network analysis -->
+    <div class="panel">
+      <h2>Network analysis <span class="muted" style="font-weight:400">· Payload Analyzer</span></h2>
+      <label class="f">Base search for your web / WAF logs</label>
+      <textarea id="na-base" rows="3" placeholder='index=web sourcetype=access_combined site="shop.example.com"'></textarea>
+      <div class="hint">Only the search part. Voyager adds the aggregation by site, path and query string.</div>
+      <details id="na-adv">
+        <summary>Field extraction and field names</summary>
+        <label class="f">Extraction (optional SPL inserted after the base search)</label>
+        <textarea id="na-extract" rows="2" placeholder='| rex field=uri "^(?&lt;uri_path&gt;[^?]*)(?:\?(?&lt;uri_query&gt;.*))?$"'></textarea>
+        <div class="hint">Nothing is assumed to be parsed: derive the fields here if your data doesn't already have them.</div>
+        <div class="row">
+          <div><label class="f">site</label><input type="text" class="na-f" data-k="site" placeholder="site"></div>
+          <div><label class="f">uri_path</label><input type="text" class="na-f" data-k="uri_path" placeholder="uri_path"></div>
+          <div><label class="f">uri_query</label><input type="text" class="na-f" data-k="uri_query" placeholder="uri_query"></div>
+        </div>
+        <div class="row">
+          <div><label class="f">src (client address)</label><input type="text" class="na-f" data-k="src" placeholder="src"></div>
+          <div><label class="f">status</label><input type="text" class="na-f" data-k="status" placeholder="status"></div>
+          <div><label class="f">action</label><input type="text" class="na-f" data-k="action" placeholder="action"></div>
+        </div>
+        <div class="hint">The field in your data that holds each value; empty = same name.</div>
+      </details>
+      <div class="row">
+        <div><label class="f">Earliest</label><input type="text" id="na-earliest" placeholder="{{ inv.earliest }}"></div>
+        <div><label class="f">Latest</label><input type="text" id="na-latest" placeholder="{{ inv.latest }}"></div>
+        <div><label class="f">Window size</label>
+          <select id="na-chunk"><option value="1h">1 hour</option><option value="6h">6 hours</option><option value="1d" selected>1 day</option><option value="7d">7 days</option></select></div>
+      </div>
+      <div class="hint">Empty = the investigation's range. Smaller windows for busy logs: each window is one Splunk job.</div>
+      <label class="f">Label (optional)</label><input type="text" id="na-title" placeholder="e.g. Shop front-end">
+      <details><summary>Show the SPL that will run</summary><pre class="spl" id="na-spl">-</pre></details>
+      <div class="actions"><button class="primary" id="na-run">Run network analysis</button><span class="err" id="na-err"></span></div>
+    </div>
+
+    <!-- entity mapper -->
+    <div class="panel">
+      <h2>Entity mapper <span class="muted" style="font-weight:400">· evolution graph</span></h2>
+      <label class="f">Values to search, one per line (address, host, account, URL, password...)</label>
+      <textarea id="em-values" rows="3" placeholder="203.0.113.7&#10;cb.attacker.example"></textarea>
+      <div class="hint">Each value is searched across all indexes in every encoding it may appear in; busy sources are counted, smaller ones pulled for the graph.</div>
+      <div class="row">
+        <div><label class="f">Earliest</label><input type="text" id="em-earliest" placeholder="{{ inv.earliest }}"></div>
+        <div><label class="f">Latest</label><input type="text" id="em-latest" placeholder="{{ inv.latest }}"></div>
+      </div>
+      <details>
+        <summary>Pull and graph options</summary>
+        <div class="row">
+          <div><label class="f">Pull raw events up to (per source)</label><input type="number" id="em-max" value="500000"></div>
+          <div><label class="f">Always pull sources containing</label><input type="text" id="em-include" placeholder="e.g. weblogic"></div>
+        </div>
+        <div class="row">
+          <div><label class="f">Time resolution</label>
+            <select id="em-bin"><option value="1">1 minute</option><option value="5" selected>5 minutes</option><option value="15">15 minutes</option><option value="60">1 hour</option></select></div>
+          <div><label class="f">Source nodes</label>
+            <select id="em-group"><option value="sourcetype" selected>per sourcetype</option><option value="index">per index</option><option value="index-sourcetype">per index + sourcetype</option></select></div>
+        </div>
+      </details>
+      <div class="actions">
+        <button class="primary" id="em-run">Search and map</button>
+        <button id="em-rebuild" {% if not inv.entities.seeds %}disabled{% endif %}>Rebuild graph</button>
+        <span class="err" id="em-err"></span>
+      </div>
+      <h3>Mapped so far</h3>
+      <div id="em-state"></div>
+    </div>
+  </div>
+
+  <div class="panel full">
+    <div class="toolbar"><h2 style="margin:0">Network findings</h2><span class="sub" id="nf-sub"></span></div>
+    <div id="nf"></div>
+  </div>
+
+  <div class="panel full">
+    <div class="toolbar"><h2 style="margin:0">Jobs</h2><span class="sub">Running jobs keep going if you close this page or restart Voyager.</span></div>
+    <div id="jobs"></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/workbench.js') }}"></script>
+<script>WB.invPage({{ inv.slug|tojson }});</script>
+{% endblock %}

@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}SplunkVoyager - Session Details{% endblock %}
+
+{% block content %}
+<div class="section">
+    <h1 class="section-title">Session Details</h1>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">
+                {% if session.is_active %}
+                    <span class="status-indicator status-active" title="Active"></span>
+                {% else %}
+                    <span class="status-indicator status-inactive" title="Inactive"></span>
+                {% endif %}
+                {{ session.domain }}
+            </h2>
+        </div>
+        <div class="card-body">
+            {# --- Using original grid layout --- #}
+            <div class="details-grid">
+                <div class="detail-item">
+                    <div class="detail-label">Username:</div>
+                    <div class="detail-value">{{ session.username }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Status:</div>
+                    <div class="detail-value">
+                        {% if session.is_active %}
+                            <span class="status-text status-active">Active</span>
+                        {% else %}
+                            <span class="status-text status-inactive">Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Last Active:</div>
+                    <div class="detail-value date-format">{{ session.last_active }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Last Check:</div>
+                    <div class="detail-value date-format">{{ session.last_check }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Created At:</div>
+                    <div class="detail-value date-format">{{ session.created_at }}</div>
+                </div>
+                 <div class="detail-item">
+                    <div class="detail-label">Session ID:</div>
+                    <div class="detail-value">{{ session.id }}</div>
+                </div>
+            </div>
+
+            <div class="actions" style="margin-top: 1.5rem;">
+                {% if session.is_active %}
+                    <button id="validate-session-btn" class="btn" data-session-id="{{ session.id }}">
+                        Validate Session
+                    </button>
+                    <button id="invalidate-session-btn" class="btn btn-danger" data-session-id="{{ session.id }}">
+                        Invalidate Session
+                    </button>
+                    <a href="{{ url_for('views.query') }}?domain={{ session.domain }}" class="btn btn-success">
+                        Execute Query
+                    </a>
+                {% else %}
+                    <button id="validate-session-btn" class="btn" data-session-id="{{ session.id }}">
+                        Validate Session
+                    </button>
+                     <a href="{{ url_for('views.sessions') }}" class="btn btn-secondary">
+                        Back to Sessions
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        {# --- Updated Title --- #}
+        <h2 class="section-title">Query Execution History</h2>
+
+        {% if executions %} {# <-- Changed from queries to executions #}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Query</th>
+                        <th>Time Range</th>
+                        <th>Started</th> {# <-- Renamed from Created #}
+                        <th>Completed</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {# --- Loop changed to execution in executions --- #}
+                    {% for execution in executions %}
+                        <tr>
+                            <td>
+                                {# --- Use execution.status --- #}
+                                {% if execution.status == 'completed' %}
+                                    <span class="status-indicator status-active" title="Completed"></span>
+                                {% elif execution.status == 'pending' or execution.status == 'running' %} {# <-- Added running #}
+                                    <span class="status-indicator status-pending" title="{{ execution.status|capitalize }}"></span>
+                                {% else %} {# <-- Failed or other #}
+                                    <span class="status-indicator status-inactive" title="{{ execution.status|capitalize }}"></span>
+                                {% endif %}
+                                {{ execution.status }}
+                            </td>
+                            <td>
+                                {# --- Use execution.query_text --- #}
+                                <div class="query-text-preview" title="{{ execution.query_text }}">{{ execution.query_text }}</div>
+                            </td>
+                            <td>
+                                {# --- Use execution.earliest_time/latest_time --- #}
+                                {% if execution.earliest_time or execution.latest_time %}
+                                    {{ execution.earliest_time or '-24h@h' }} to {{ execution.latest_time or 'now' }} {# <-- Kept original defaults #}
+                                {% else %}
+                                    Default
+                                {% endif %}
+                            </td>
+                            {# --- Use execution.created_at for Start time --- #}
+                            <td class="date-format">{{ execution.created_at }}</td>
+                            {# --- Use execution.completed_at --- #}
+                            <td class="date-format">{{ execution.completed_at or '-' }}</td>
+                            <td class="action-buttons">
+								<a href="{{ url_for('views.execution_detail', execution_id=execution.execution_id) }}" class="btn btn-sm">
+									View Results
+								</a>
+								{# --- Add data-definition-id attribute HERE --- #}
+								<button class="btn btn-success btn-sm rerun-query-btn"
+										data-query-text="{{ execution.query_text }}"
+										data-domain="{{ session.domain }}" {# Domain comes from overall session #}
+										data-earliest="{{ execution.earliest_time or '' }}"
+										data-latest="{{ execution.latest_time or '' }}"
+										data-definition-id="{{ execution.query_definition_id }}"> {# <-- ADD THIS LINE #}
+									Re-run
+								</button>
+								<button class="btn btn-danger btn-sm delete-execution-btn" data-execution-id="{{ execution.execution_id }}">
+									Delete
+								</button>
+							</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="card">
+                <div class="card-body">
+                    <p>No query executions have been recorded for this session.</p>
+                    {% if session.is_active %}
+                        <a href="{{ url_for('views.query') }}?domain={{ session.domain }}" class="btn btn-success">
+                            Execute Query
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Pass template variables to external JS
+window.sessionDetailConfig = {
+    sessionId: "{{ session.id }}",
+    sessionDetailUrl: "{{ url_for('views.session_detail', session_id=0) }}".replace('/0', ''), // Base URL without ID
+    executionDetailUrl: "{{ url_for('views.execution_detail', execution_id=0) }}".replace('/0', '') // Base URL without ID
+};
+</script>
+<script src="{{ url_for('static', filename='js/session_detail.js') }}"></script>
+{% endblock %}
