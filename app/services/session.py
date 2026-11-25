@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 from app.utils.debug import log_request, get_session
 
-from voyager_settings import splunk_url
+from voyager_settings import splunk_url, use_instance
 from app.config import (
     BEACON_INTERVAL, 
     COOKIE_DIR,
@@ -46,7 +46,8 @@ def validate_session(cookies, domain):
         tuple: (is_functionally_valid, username, data)
     """
     try:
-        check_url = splunk_url("config")
+        with use_instance(domain):    # the instance whose host this cookie domain belongs to
+            check_url = splunk_url("config")
         headers = {
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',

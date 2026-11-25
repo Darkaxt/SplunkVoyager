@@ -27,6 +27,7 @@ import html
 import json
 import math
 import os
+import shutil
 import re
 import subprocess
 import sys
@@ -119,7 +120,7 @@ def exporter(args):
     spec.loader.exec_module(se)
     base = args.base or se.DEFAULT_BASE
     host = urlparse(base).hostname
-    sp = se.Splunk(base, se.DEFAULT_LOCALE, lambda quiet: se.find_cookies(args.cookies, args.db, host, quiet))
+    sp = se.Splunk(base, getattr(args, "locale", None) or se.DEFAULT_LOCALE, lambda quiet: se.find_cookies(args.cookies, args.db, host, quiet))
     while True:
         try:
             user, _ = sp.whoami()
@@ -236,8 +237,19 @@ def cmd_seed(args):
         case["seeds"].append(sd)
         case_save(args.case, case)
     if (args.earliest, args.latest) != (sd["earliest"], sd["latest"]):
-        print(f"Seed already in case with range {sd['earliest']} -> {sd['latest']}; keeping that range "
-              f"(resumable runs can't change their range). Use a new case folder for a different range.")
+        if getattr(args, "reset_range", False):
+            # throw away this seed's results (stage 1 and raw pulls) and search again with the new range
+            shutil.rmtree(Path(args.case) / "seeds" / sd["slug"], ignore_errors=True)
+            sd.update(earliest=args.earliest, latest=args.latest)
+            sd.pop("variants", None)
+            case_save(args.case, case)
+            print(f"Range of {ioc!r} reset to {args.earliest} -> {args.latest}; its earlier results were removed.",
+                  file=sys.stderr)
+        else:
+            print(f"\n*** {ioc!r} is already in this case with the range {sd['earliest']} -> {sd['latest']}.\n"
+                  f"*** Continuing with THAT range, not {args.earliest} -> {args.latest}.\n"
+                  f"*** To search the new range, add --reset-range (redoes this value only) or use a new case folder.\n",
+                  file=sys.stderr)
     legacy = "variants" not in sd and (Path(args.case) / "seeds" / sd["slug"] / "stage1").is_dir()
     if legacy:
         print("This seed was started by an earlier version: keeping its original search (IOC as given) so it resumes.")
@@ -838,7 +850,12 @@ def cmd_status(args):
         nodes = stage1_nodes(seed_dir / "stage1") if (seed_dir / "stage1").is_dir() else {}
         pulled = {(json.loads(Path(p).read_text())["index"], json.loads(Path(p).read_text())["sourcetype"])
                   for p in glob.glob(str(seed_dir / "raw" / "*" / "node.json"))}
-        print(f"\n{sd['value']}  [{sd['earliest']} -> {sd['latest']}]")
+        found = ""
+        bins = [b for d in nodes.values() for b in d["bins"]]
+        if bins:
+            f = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:00")
+            found = f"   found {f(min(bins))} -> {f(max(bins))} UTC"
+        print(f"\n{sd['value']}  [searched {sd['earliest']} -> {sd['latest']}]{found}")
         for (idx, st), d in sorted(nodes.items(), key=lambda kv: -kv[1]["count"]):
             print(f"  {'raw' if (idx, st) in pulled else '   '} {d['count']:>12,}  {idx} / {st}")
 
@@ -855,6 +872,8 @@ def main():
     s = sub.add_parser("seed", help="stage-1 counts + raw pulls for an IOC (resumable)")
     s.add_argument("case", help="case folder (created if missing)")
     s.add_argument("ioc", help="IOC to search for (IP, domain, URL, email, account, password, file name...)")
+    s.add_argument("--reset-range", action="store_true",
+                   help="the value is already in the case with another time range: drop its results and search again")
     s.add_argument("--no-variants", action="store_true",
                    help="search only the IOC as given (default also searches URL-decoded/encoded forms)")
     s.add_argument("--earliest", required=True)
@@ -871,6 +890,7 @@ def main():
     s.add_argument("--app", default=None, help="app context (default: Voyager settings, else your default app)")
     s.add_argument("--exporter", default=str(EXPORTER))
     s.add_argument("--base")
+    s.add_argument("--locale", default=None, help="locale in Splunk URLs (default: Voyager settings)")
     s.add_argument("--db")
     s.add_argument("--cookies")
     s.add_argument("--poll")

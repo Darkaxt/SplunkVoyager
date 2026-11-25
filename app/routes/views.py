@@ -147,15 +147,21 @@ def query():
     Render the query page
     """
     # Get all domains with active sessions
+    import voyager_settings
+    s = voyager_settings.load()
     domains = []
-    active_sessions = Session.get_all_active()
-    
-    for session in active_sessions:
+    for session in Session.get_all_active():
+        inst = voyager_settings.instance(session['domain'])
+        known = any(voyager_settings.host_of(i['base']) == voyager_settings.host_of(inst['base']) for i in s['instances'])
         domains.append({
             'domain': session['domain'],
             'username': session['username'],
-            'session_id': session['id']
+            'session_id': session['id'],
+            'instance': inst['name'] if known else '',
+            'default': known and inst['name'] == s['default_instance'],
         })
+    # the default instance's session first, so it is the one preselected
+    domains.sort(key=lambda d: (not d['default'], d['instance'] == '', d['domain']))
     
     return render_template(
         'query.html', 

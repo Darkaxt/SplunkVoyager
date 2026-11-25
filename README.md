@@ -34,14 +34,17 @@ python run.py
 
 Behind a corporate proxy, add `--proxy http://proxy:port` to the pip command.
 
-`run.py` starts the web app on <http://localhost:8080> and a terminal dashboard (`python run.py --help` for
-options). Then:
+`run.py` starts the web app on <http://localhost:8080>, opens it in your browser (`--no-browser` to skip) and
+shows a terminal dashboard (`python run.py --help` for options). Then:
 
-1. Open **Settings**, enter your Splunk Web URL (for example `https://splunk.example.com`), the locale shown
-   in your Splunk URLs (`en-US`, `en-GB`...) and, optionally, the app your searches should run in.
-2. On the same page, install the userscript. It is generated for your Splunk URL and runs only there.
+1. In **Settings**, add your Splunk instance: its Splunk Web URL (for example `https://splunk.example.com`), the
+   locale shown in your Splunk URLs (`en-US`, `en-GB`...) and, optionally, the app your searches should run in.
+   Add more instances if you work with several Splunks; one of them is the default.
+2. On the same page, install the userscript. It is generated for your instances and runs only on them
+   (reinstall it after adding one).
 3. Open any Splunk page. The session appears in Voyager's header within 30 seconds.
-4. Open **Investigations**, create one with a time range, and start the analyses.
+4. Open **Investigations**, create one with a time range (and, with several instances, the Splunk to search),
+   and start the analyses. On the **Query** page, the session of your default instance is preselected.
 
 For long runs, open one Splunk tab with `#voyager` at the end of its URL: it becomes the keep-alive tab and
 reloads itself when Splunk ends the session, so the exports continue on their own. While an export runs, Voyager
@@ -81,11 +84,14 @@ python network_feed.py merge exports\x -o requests.jsonl
 python -I payload_analyzer\payload_analyzer.py pipeline requests.jsonl -o analysis.json
 python -I payload_analyzer\report_builder.py analysis.json -o report.html
 python pivot_graph.py seed cases\acct "admin@example.com" --earliest 2026-10-01 --latest 2026-11-01
+python pivot_graph.py status cases\acct                                     # range searched and range found
 python pivot_graph.py build cases\acct cases\other -o combined.html          # several cases in one graph
 ```
 
-Each script has `--help`. The command-line tools read the same settings (`data/settings.json`); the
-environment variables `SPLUNK_BASE`, `SPLUNK_LOCALE`, `SPLUNK_APP` and `SPLUNK_COOKIE` override them.
+A value already in a case keeps the time range of its first search; `seed ... --reset-range` searches it again
+with the new range. Each script has `--help`. The command-line tools use the default instance from the same settings
+(`data/settings.json`), or `--base`/`--locale`/`--app`; the environment variables `SPLUNK_BASE`, `SPLUNK_LOCALE`,
+`SPLUNK_APP` and `SPLUNK_COOKIE` override the default instance.
 
 ## Where things are
 

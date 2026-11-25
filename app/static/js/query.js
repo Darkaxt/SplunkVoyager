@@ -210,6 +210,15 @@ function checkUrlParams() {
             }
         }
     }
+    if (!domain && domainSelect && !domainSelect.value) {
+        // no domain in the URL: preselect the default instance's session, or the only session there is
+        const real = [...domainSelect.options].filter(o => o.value);
+        const pick = real.find(o => o.dataset.default === '1') || (real.length === 1 ? real[0] : null);
+        if (pick) {
+            domainSelect.value = pick.value;
+            domainSelect.dispatchEvent(new Event('change'));
+        }
+    }
     if (query && queryInput) { queryInput.value = query; }
     if (earliest && earliestInput) { earliestInput.value = earliest; }
     if (latest && latestInput) { latestInput.value = latest; }

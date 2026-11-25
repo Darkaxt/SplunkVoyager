@@ -64,14 +64,15 @@ def inv_file(slug, p):
 
 @workbench_bp.route("/voyager.user.js")
 def userscript():
-    s = voyager_settings.load()
-    if not s["splunk_base"]:
-        return Response("// Set the Splunk URL in Voyager's Settings page first, then reload this link.\n",
+    origins = voyager_settings.origins()
+    if not origins:
+        return Response("// Add a Splunk instance in Voyager's Settings page first, then reload this link.\n",
                         mimetype="application/javascript")
     with open(os.path.join(ROOT_DIR, "app", "static", "voyager.user.js.tmpl"), encoding="utf-8") as fh:
         js = fh.read()
     backend = f"{request.scheme}://{request.host}"
-    js = js.replace("__MATCH__", s["splunk_base"].rstrip("/") + "/*").replace("__BACKEND__", backend)
+    match = "\n".join(f"// @match        {o}/*" for o in origins)
+    js = js.replace("// @match        __MATCH__", match).replace("__BACKEND__", backend)
     return Response(js, mimetype="application/javascript")
 
 
@@ -81,12 +82,6 @@ def api_settings():
     if request.method == "GET":
         return jsonify(voyager_settings.load())
     data = _json()
-    base = (data.get("splunk_base") or "").strip()
-    if base:
-        u = urlsplit(base)
-        if u.scheme not in ("https", "http") or not u.netloc:
-            return _err("Splunk URL must look like https://splunk.example.com")
-        data["splunk_base"] = f"{u.scheme}://{u.netloc}{u.path.rstrip('/')}"
     try:
         return jsonify(voyager_settings.save(data))
     except (ValueError, OSError) as e:
@@ -100,7 +95,7 @@ def api_investigations():
     d = _json()
     try:
         return jsonify(wb.create_investigation(d.get("name", ""), d.get("earliest", ""), d.get("latest", ""),
-                                               d.get("notes", "")))
+                                               d.get("notes", ""), d.get("instance", "")))
     except ValueError as e:
         return _err(e)
 

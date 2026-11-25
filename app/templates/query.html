@@ -16,8 +16,8 @@
                 <select id="domain-select" class="form-control">
                     <option value="">-- Select a domain --</option>
                     {% for domain in domains %}
-                        <option value="{{ domain.domain }}" data-session-id="{{ domain.session_id }}">
-                            {{ domain.domain }} ({{ domain.username }})
+                        <option value="{{ domain.domain }}" data-session-id="{{ domain.session_id }}"{% if domain.default %} data-default="1"{% endif %}>
+                            {% if domain.instance %}{{ domain.instance }} · {% endif %}{{ domain.domain }} ({{ domain.username }}){% if not domain.instance %} - not in Settings{% endif %}
                         </option>
                     {% endfor %}
                 </select>

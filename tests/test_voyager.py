@@ -83,6 +83,32 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("http://localhost/api/receive_cookies", js)
         self.assertEqual(self.c.post("/api/settings", json={"splunk_base": "not a url"}).status_code, 400)
 
+    def test_several_instances(self):
+        self.vs.SETTINGS_PATH.write_text(json.dumps({"splunk_base": "https://old.example.com", "splunk_locale": "en-GB"}))
+        s = self.vs.load()                                   # single-URL settings convert to one instance
+        self.assertEqual([(i["name"], i["locale"]) for i in s["instances"]], [("old.example.com", "en-GB")])
+        r = self.c.post("/api/settings", json={"instances": [
+            {"name": "prod", "base": "https://splunk.example.com/", "locale": "en-GB", "app": "secops"},
+            {"name": "lab", "base": "https://lab-splunk.example.org", "locale": ""}], "default_instance": "lab"})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        s = self.vs.load()
+        self.assertEqual(s["splunk_base"], "https://lab-splunk.example.org")      # default instance
+        self.assertEqual(self.vs.instance(".example.com")["name"], "prod")         # by cookie domain
+        self.assertEqual(self.vs.instance("splunk.example.com")["app"], "secops")
+        self.assertEqual(self.vs.instance("nowhere.test")["name"], "lab")           # unknown -> default
+        with self.vs.use_instance("splunk.example.com"):
+            self.assertEqual(self.vs.splunk_url("config"), "https://splunk.example.com/en-GB/config")
+        self.assertEqual(self.vs.splunk_url("config"), "https://lab-splunk.example.org/en-US/config")
+        js = self.c.get("/voyager.user.js").get_data(as_text=True)
+        self.assertIn("// @match        https://splunk.example.com/*", js)
+        self.assertIn("// @match        https://lab-splunk.example.org/*", js)
+        for o in ("https://splunk.example.com", "https://lab-splunk.example.org"):
+            pre = self.c.options("/api/receive_cookies", headers={"Origin": o, "Access-Control-Request-Method": "POST"})
+            self.assertEqual(pre.headers.get("Access-Control-Allow-Origin"), o)
+        bad = self.c.post("/api/settings", json={"instances": [{"name": "a", "base": "https://x.example"},
+                                                               {"name": "A", "base": "https://y.example"}]})
+        self.assertEqual(bad.status_code, 400)
+
     def test_origin_guard(self):
         self.c.post("/api/settings", json={"splunk_base": "https://splunk.example.com"})
         evil = {"Origin": "https://evil.example"}
@@ -97,6 +123,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_files_stay_inside_investigation(self):
         from app.services import workbench as wb
+        self.c.post("/api/settings", json={"instances": [{"base": "https://splunk.example.com"}]})
         with tempfile.TemporaryDirectory() as d:
             orig = wb.INV_ROOT
             wb.INV_ROOT = Path(d)
@@ -153,6 +180,38 @@ class EndToEndTest(unittest.TestCase):
         self.assertTrue({"ssrf", "file_access", "rce"} <= set(srcs["198.51.100.23"]["categories"]))
         self.assertIn("cb.attacker.example", {c["value"] for c in f["callbacks"]})
         self.assertTrue((d / "report.html").stat().st_size > 10000)
+
+    def test_gui_jobs(self):
+        """The jobs the GUI starts (job runner + generated command lines), both modules at once."""
+        import voyager_settings
+        from app.services import workbench as wb
+        d = Path(self.tmp.name, "gui")
+        orig_settings, orig_root = voyager_settings.SETTINGS_PATH, wb.INV_ROOT
+        voyager_settings.SETTINGS_PATH, wb.INV_ROOT = d / "settings.json", d / "investigations"
+        os.environ["SPLUNK_COOKIE"] = "splunkd_8000=test"
+        saved = {k: os.environ.pop(k, None) for k in ("SPLUNK_BASE", "SPLUNK_LOCALE", "SPLUNK_APP")}
+        try:
+            voyager_settings.save({"instances": [{"name": "mock", "base": self.base, "locale": "en-GB"}]})
+            inv = wb.create_investigation("GUI test", "1792454400", "1792713600")
+            jn = wb.start_network(inv["slug"], "index=web sourcetype=access_combined", chunk="1d")
+            je = wb.start_entities(inv["slug"], ["203.0.113.7"], bin_min=1)
+            deadline = time.time() + 300
+            while time.time() < deadline:
+                st = {j["id"]: j for j in wb.get_investigation(inv["slug"])["jobs"]}
+                if all(st[j]["status"] in ("done", "failed", "interrupted") for j in (jn, je)):
+                    break
+                time.sleep(1)
+            for j in (jn, je):
+                self.assertEqual(st[j]["status"], "done", wb.read_log(inv["slug"], j))
+            got = wb.get_investigation(inv["slug"])
+            self.assertEqual({s["value"] for s in got["network"][0]["findings"]["sources"]}, {"203.0.113.7", "198.51.100.23"})
+            self.assertEqual(got["entities"]["seeds"], ["203.0.113.7"])
+            self.assertTrue(got["entities"]["graph"])
+        finally:
+            voyager_settings.SETTINGS_PATH, wb.INV_ROOT = orig_settings, orig_root
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
 
     def test_entity_mapper(self):
         case = Path(self.tmp.name, "case")

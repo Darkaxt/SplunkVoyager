@@ -83,17 +83,20 @@ def list_investigations():
     return sorted(out, key=lambda x: x.get("created", ""), reverse=True)
 
 
-def create_investigation(name, earliest, latest, notes=""):
+def create_investigation(name, earliest, latest, notes="", instance=""):
     if not name.strip():
         raise ValueError("name is required")
     if not earliest:
         raise ValueError("earliest time is required")
+    inst = voyager_settings.instance(instance or None)
+    if not inst.get("base"):
+        raise ValueError("Add a Splunk instance in Settings first")
     INV_ROOT.mkdir(parents=True, exist_ok=True)
     slug = slugify(name)
     d = INV_ROOT / slug
     (d / "jobs").mkdir(parents=True)
     inv = {"slug": slug, "name": name.strip(), "earliest": earliest, "latest": latest or "now",
-           "notes": notes, "created": _now()}
+           "notes": notes, "instance": inst["name"], "created": _now()}
     _write(d / "investigation.json", inv)
     return inv
 
@@ -124,7 +127,7 @@ def get_investigation(slug):
 def update_investigation(slug, **kv):
     d = inv_dir(slug)
     inv = _read(d / "investigation.json", {})
-    inv.update({k: v for k, v in kv.items() if k in ("name", "earliest", "latest", "notes")})
+    inv.update({k: v for k, v in kv.items() if k in ("name", "earliest", "latest", "notes", "instance")})
     _write(d / "investigation.json", inv)
     return inv
 
@@ -271,13 +274,21 @@ def read_log(slug, jid, tail=400):
         return ""
 
 
-def _common_export_args():
+def _instance(d):
+    """The investigation's Splunk instance (falls back to the default one if it was removed from Settings)."""
+    inst = voyager_settings.instance(_read(d / "investigation.json", {}).get("instance") or None)
+    if not inst.get("base"):
+        raise ValueError("Add a Splunk instance in Settings first")
+    return inst
+
+
+def _common_export_args(d):
+    """Where and how searches run: --base/--locale/--app of the investigation's instance."""
     s = voyager_settings.load()
-    if not s["splunk_base"]:
-        raise ValueError("Set the Splunk URL in Settings first")
-    args = ["--max-jobs", str(s.get("max_jobs") or 2)]
-    if s.get("splunk_app"):
-        args += ["--app", s["splunk_app"]]
+    inst = _instance(d)
+    args = ["--base", inst["base"], "--locale", inst["locale"], "--max-jobs", str(s.get("max_jobs") or 2)]
+    if inst.get("app"):
+        args += ["--app", inst["app"]]
     return args
 
 
@@ -297,10 +308,13 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
     nd.mkdir(parents=True, exist_ok=True)
     (nd / "query.spl").write_text(spl, encoding="utf-8")
     pa = ROOT / "payload_analyzer"
+    common = _common_export_args(d)     # --base B --locale L, then --max-jobs N [--app A]
     steps = [
-        {"name": "Splunk export", "argv": [PY, str(ROOT / "splunk_export.py"), "run", "@" + str(nd / "query.spl"),
+        # splunk_export.py: --base/--locale are global options (before "run"), the rest belong to "run"
+        {"name": "Splunk export", "argv": [PY, str(ROOT / "splunk_export.py")] + common[:4] + [
+                                           "run", "@" + str(nd / "query.spl"),
                                            "--earliest", earliest, "--latest", latest, "--chunk", chunk,
-                                           "--out-dir", str(nd / "export"), "-f", "jsonl"] + _common_export_args(),
+                                           "--out-dir", str(nd / "export"), "-f", "jsonl"] + common[4:],
          "progress": [str(nd / "export" / "manifest.json")]},
         {"name": "Merge time windows", "argv": [PY, str(ROOT / "network_feed.py"), "merge", str(nd / "export"),
                                                 "-o", str(nd / "requests.jsonl")]},
@@ -321,8 +335,10 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
 # ------------------------------------------------------------------ module: entity evolution mapper (pivot graph)
 def _build_step(d, slug, bin_min=5, group="sourcetype"):
     ed = d / "entities"
+    inst = _instance(d)
+    links = ["--splunk-base", inst["base"], "--locale", inst["locale"]] + (["--app", inst["app"]] if inst.get("app") else [])
     return {"name": "Build graph", "argv": [PY, str(ROOT / "pivot_graph.py"), "build", str(ed), "-o", str(ed / "graph.html"),
-                                            "--bin", str(bin_min), "--group", group,
+                                            "--bin", str(bin_min), "--group", group] + links + [
                                             "--voyager-api", f"/api/inv/{slug}/entities",
                                             "--title", _read(d / "investigation.json", {}).get("name", "IOC pivot graph")]}
 
@@ -337,7 +353,7 @@ def start_entities(slug, values, earliest=None, latest=None, include="", max_eve
     earliest, latest = earliest or inv["earliest"], latest or inv.get("latest") or "now"
     ed = d / "entities"
     ed.mkdir(parents=True, exist_ok=True)
-    common = _common_export_args()
+    common = _common_export_args(d)
     steps = []
     for v in values:
         argv = [PY, str(ROOT / "pivot_graph.py"), "seed", str(ed), v, "--earliest", earliest, "--latest", latest,

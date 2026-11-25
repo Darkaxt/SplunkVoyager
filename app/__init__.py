@@ -211,7 +211,7 @@ def _origin_of(url):
 def install_origin_guard(app):
     """
     Cross-origin rules, read from the settings on every request:
-    - the userscript on the configured Splunk origin may POST cookies (/api/receive_cookies);
+    - the userscript on a configured Splunk instance may POST cookies (/api/receive_cookies);
     - any other cross-origin request that changes state is refused, so a web page can't start
       Splunk searches or jobs through this local app with your session.
     """
@@ -223,8 +223,7 @@ def install_origin_guard(app):
         if not origin:
             return None     # same-origin GETs, the exporter, curl: no Origin header
         own = _origin_of(request.host_url)
-        splunk = _origin_of(voyager_settings.get("splunk_base"))
-        if request.path in COOKIE_PATHS and splunk and origin == splunk:
+        if request.path in COOKIE_PATHS and origin in voyager_settings.origins():
             if request.method == "OPTIONS":
                 return app.make_default_options_response()
             return None
@@ -235,8 +234,7 @@ def install_origin_guard(app):
     @app.after_request
     def _cors(resp):
         origin = (request.headers.get("Origin") or "").lower()
-        splunk = _origin_of(voyager_settings.get("splunk_base"))
-        if request.path in COOKIE_PATHS and splunk and origin == splunk:
+        if request.path in COOKIE_PATHS and origin and origin in voyager_settings.origins():
             resp.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin")
             resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
             resp.headers["Access-Control-Allow-Headers"] = "Content-Type"

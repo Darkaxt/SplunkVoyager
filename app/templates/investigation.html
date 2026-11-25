@@ -8,7 +8,7 @@
       <div class="sub"><a href="{{ url_for('workbench.investigations_page') }}">Investigations</a> /</div>
       <h1 id="inv-name">{{ inv.name }}</h1>
       <div class="sub">
-        Time range <span class="mono" id="inv-range">{{ inv.earliest }} → {{ inv.latest }}</span>
+        {% if inv.instance %}Splunk <b>{{ inv.instance }}</b> · {% endif %}Time range <span class="mono" id="inv-range">{{ inv.earliest }} → {{ inv.latest }}</span>
         · <a href="#" id="edit-range">change</a>
         {% if inv.notes %} · {{ inv.notes }}{% endif %}
       </div>
@@ -22,8 +22,8 @@
     <div class="hint">Used as the default for new runs. Runs already started keep their own range.</div>
     <div class="actions"><button class="primary" id="r-save">Save</button><button id="r-cancel">Cancel</button></div>
   </div>
-  {% if not settings.splunk_base %}
-  <div class="note warn">Set your Splunk URL in <a href="{{ url_for('workbench.settings_page') }}">Settings</a> before starting any analysis.</div>
+  {% if not settings.instances %}
+  <div class="note warn">Add your Splunk instance in <a href="{{ url_for('workbench.settings_page') }}">Settings</a> before starting any analysis.</div>
   {% endif %}
 
   <div class="grid2">

@@ -1,3 +1,4 @@
+from voyager_settings import use_instance
 from flask import Blueprint, request, jsonify, Response, abort
 from io import BytesIO
 import json
@@ -270,7 +271,8 @@ def get_user_info(session_id):
                  'source': 'database (no cookies)'
             })
 
-        success, splunk_username, app = get_username_and_app(cookies) # Assumes this service exists
+        with use_instance(db_domain):
+            success, splunk_username, app = get_username_and_app(cookies)
 
         if success:
              # Compare DB username with Splunk username - log if different
@@ -422,9 +424,10 @@ def api_execute_query():
         logger.info(f"Executing/Re-executing Splunk query via service for definition ID: {definition_id}")
 
         # Call the main execute_query function from splunk.py which handles SID storage and status updates
-        success_exec, results_data, error_msg = execute_query(
-            cookies, query_text, earliest_time, latest_time, definition_id=definition_id
-        )
+        with use_instance(domain):   # the Splunk instance this session's cookies belong to
+            success_exec, results_data, error_msg = execute_query(
+                cookies, query_text, earliest_time, latest_time, definition_id=definition_id
+            )
 
         # 5. Record/Update Execution & Return Results
         # Status is already updated by execute_query. Just record user interaction.
@@ -613,9 +616,10 @@ def rerun_query_definition(definition_id):
 
         # --- THIS IS THE CORRECTED LINE ---
         # Pass the definition_id to the execute_query service function
-        success, results_data, error_msg = execute_query(
-            cookies, query_text, earliest_time, latest_time, definition_id=definition_id
-        )
+        with use_instance(domain):
+            success, results_data, error_msg = execute_query(
+                cookies, query_text, earliest_time, latest_time, definition_id=definition_id
+            )
         # --- END OF CORRECTION ---
 
 

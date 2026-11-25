@@ -21,7 +21,7 @@ const WB = (() => {
       $('#inv-list').innerHTML = list.length ? list.map(i => `
         <a class="card2" href="/investigations/${esc(i.slug)}">
           <div style="font-weight:600;font-size:15px">${esc(i.name)}</div>
-          <div class="mono muted" style="margin-top:4px">${esc(i.earliest)} → ${esc(i.latest)}</div>
+          <div class="mono muted" style="margin-top:4px">${esc(i.earliest)} → ${esc(i.latest)}${i.instance ? ' · ' + esc(i.instance) : ''}</div>
           <div class="sub" style="margin-top:6px">${i.jobs_total} job${i.jobs_total === 1 ? '' : 's'}${i.jobs_running ? ` · <span style="color:#8cc8f5">${i.jobs_running} running</span>` : ''} · created ${esc(fmt(i.created))}</div>
           ${i.notes ? `<div class="sub" style="margin-top:4px">${esc(i.notes)}</div>` : ''}
         </a>`).join('') : '<div class="empty">None yet.</div>';
@@ -30,7 +30,7 @@ const WB = (() => {
       $('#n-err').textContent = '';
       try {
         const inv = await api('/api/inv', {name: $('#n-name').value, earliest: $('#n-earliest').value,
-          latest: $('#n-latest').value, notes: $('#n-notes').value});
+          latest: $('#n-latest').value, notes: $('#n-notes').value, instance: $('#n-inst') ? $('#n-inst').value : ''});
         location.href = `/investigations/${inv.slug}`;
       } catch (e) { $('#n-err').textContent = e.message; }
     };
@@ -38,13 +38,37 @@ const WB = (() => {
   }
 
   // ---------------------------------------------------------------- settings page
-  function settingsPage() {
+  function settingsPage(instances, def) {
+    const tbl = $('#inst-table');
+    const row = (i = {}) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><input type="radio" name="inst-def"></td>
+        <td><input type="text" class="i-name" placeholder="(from the URL)" value="${esc(i.name || '')}"></td>
+        <td><input type="text" class="i-base" placeholder="https://splunk.example.com" value="${esc(i.base || '')}"></td>
+        <td style="width:90px"><input type="text" class="i-locale" placeholder="en-US" value="${esc(i.locale || '')}"></td>
+        <td><input type="text" class="i-app" placeholder="(default app)" value="${esc(i.app || '')}"></td>
+        <td><button class="danger i-del" title="Remove">✕</button></td>`;
+      tr.querySelector('input[type=radio]').checked = !!i.name && i.name === def;
+      tr.querySelector('.i-del').onclick = () => tr.remove();
+      tbl.appendChild(tr);
+    };
+    (instances.length ? instances : [{}]).forEach(row);
+    if (!tbl.querySelector('input[type=radio]:checked')) tbl.querySelector('input[type=radio]').checked = true;
+    $('#inst-add').onclick = () => row();
     $('#s-save').onclick = async () => {
       $('#s-msg').textContent = '';
+      const rows = [...tbl.querySelectorAll('tr')].slice(1);
+      const insts = rows.map(r => ({name: r.querySelector('.i-name').value, base: r.querySelector('.i-base').value,
+        locale: r.querySelector('.i-locale').value, app: r.querySelector('.i-app').value}));
+      const di = rows.findIndex(r => r.querySelector('input[type=radio]').checked);
       try {
-        await api('/api/settings', {splunk_base: $('#s-base').value, splunk_locale: $('#s-locale').value,
-          splunk_app: $('#s-app').value, max_jobs: $('#s-max').value, voyager_url: $('#s-vurl').value});
-        $('#s-msg').textContent = 'Saved.';
+        const s = await api('/api/settings', {instances: insts, max_jobs: $('#s-max').value, voyager_url: $('#s-vurl').value,
+          default_instance: di >= 0 ? (insts[di].name.trim() || '') : ''});
+        // names are filled in from the URL when left empty: pick the default again by position
+        if (di >= 0 && !insts[di].name.trim() && s.instances[di])
+          await api('/api/settings', {default_instance: s.instances[di].name});
+        $('#s-msg').textContent = 'Saved. Reinstall the userscript if you added or changed a URL.';
+        tbl.querySelectorAll('tr').forEach((r, k) => { if (k && s.instances[k - 1]) r.querySelector('.i-name').value = s.instances[k - 1].name; });
       } catch (e) { $('#s-msg').textContent = e.message; }
     };
   }

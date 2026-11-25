@@ -5,8 +5,8 @@
 <div class="wb">
   <h1>Investigations</h1>
   <div class="sub">Each investigation has a time range and runs the network analysis (Payload Analyzer) and the entity mapper on it, side by side.</div>
-  {% if not settings.splunk_base %}
-  <div class="note warn">Set your Splunk URL in <a href="{{ url_for('workbench.settings_page') }}">Settings</a> before starting any analysis.</div>
+  {% if not settings.instances %}
+  <div class="note warn">Add your Splunk instance in <a href="{{ url_for('workbench.settings_page') }}">Settings</a> before starting any analysis.</div>
   {% endif %}
 
   <div class="grid2">
@@ -19,6 +19,10 @@
         <div><label class="f">Latest</label><input type="text" id="n-latest" placeholder="now"></div>
       </div>
       <div class="hint">Dates as YYYY-MM-DD or YYYY-MM-DDTHH:MM (this computer's time), or relative like -7d, -12h@h, now.</div>
+      {% if settings.instances|length > 1 %}
+      <label class="f">Splunk instance</label>
+      <select id="n-inst">{% for i in settings.instances %}<option value="{{ i.name }}"{% if i.name == settings.default_instance %} selected{% endif %}>{{ i.name }} · {{ i.base }}</option>{% endfor %}</select>
+      {% endif %}
       <label class="f">Notes (optional)</label>
       <textarea id="n-notes" rows="2" style="font-family:inherit"></textarea>
       <div class="actions"><button class="primary" id="n-create">Create</button><span class="err" id="n-err"></span></div>

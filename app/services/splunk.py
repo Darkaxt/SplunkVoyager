@@ -665,27 +665,15 @@ def execute_query(cookies, query, earliest_time=None, latest_time=None, definiti
         return False, None, str(e)
 
 def get_available_endpoints(cookies):
-    """
-    Get available Splunk endpoints
-    
-    Args:
-        cookies (dict or str): The cookies to authenticate with
-        
-    Returns:
-        tuple: (success, endpoints)
-    """
-    # This is a placeholder function that should be implemented
-    # based on your specific requirements
-    
-    # For now, we'll just return a placeholder result
+    """Configured Splunk instances (the cookies are checked against the default one)."""
+    s = voyager_settings.load()
     success, username, app = get_username_and_app(cookies)
-    if success:
-        return True, [
-            {"name": "Main Splunk", "url": voyager_settings.get("splunk_base"), "username": username, "app": app}
-        ]
-    else:
+    if not success:
         return False, []
-      
+    return True, [{"name": i["name"], "url": i["base"], "username": username, "app": i.get("app") or app,
+                   "default": i["name"] == s["default_instance"]} for i in s["instances"]]
+
+
 def rerun_query_definition_service(definition_id, triggering_username, triggering_domain, force_if_running=False):
     """
     Service function to re-run a query definition. Finds an active session for the
@@ -750,7 +738,8 @@ def background_rerun_query(definition_id, username, domain):
     logger.info(f"Background task starting auto re-run for definition {definition_id} (user: {username}@{domain})")
     try:
         # Call directly - assumes rerun_query_definition_service is defined above
-        success, message, _ = rerun_query_definition_service(definition_id, username, domain, force_if_running=True)
+        with voyager_settings.use_instance(domain):
+            success, message, _ = rerun_query_definition_service(definition_id, username, domain, force_if_running=True)
         if success:
             logger.info(f"Background auto re-run for definition {definition_id} completed successfully.")
         else:

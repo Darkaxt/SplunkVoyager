@@ -5,6 +5,7 @@ import sys
 import argparse
 import shutil
 import threading
+import time
 import logging
 from pathlib import Path
 from waitress import serve
@@ -73,7 +74,26 @@ class TerminalLogHandler(logging.Handler):
         if len(self.logs) > self.max_logs:
             self.logs.pop(0)
 
-def start_application():
+def open_browser_when_ready():
+    """Open the GUI once the server answers: Settings if no Splunk instance is configured yet."""
+    import urllib.request
+    import webbrowser
+    import voyager_settings
+    host = "localhost" if HOST in ("0.0.0.0", "127.0.0.1", "::") else HOST
+    page = "investigations" if voyager_settings.load()["instances"] else "settings"
+    url = f"http://{host}:{PORT}/{page}"
+    for _ in range(60):
+        try:
+            urllib.request.urlopen(f"http://{host}:{PORT}/api/settings", timeout=2).read()
+            webbrowser.open(url)
+            logger.info(f"Opened {url}")
+            return
+        except Exception:
+            time.sleep(0.5)
+    logger.warning(f"Web interface did not answer; open {url} yourself")
+
+
+def start_application(open_browser=True):
     """
     Start the application with the terminal UI
     """
@@ -99,6 +119,8 @@ def start_application():
     )
     web_thread.start()
     logger.info(f"Started SplunkVoyager web interface with Waitress on {HOST}:{PORT}")
+    if open_browser:
+        threading.Thread(target=open_browser_when_ready, daemon=True).start()
 
     tui_running = False
     try:
@@ -143,6 +165,7 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Run the SplunkVoyager application')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode with request logging')
+    parser.add_argument('--no-browser', action='store_true', help="Don't open the web interface in the browser")
     parser.add_argument('--wipe', action='store_true', help='Wipe session data (cookies, database, logs) and debug folders; investigations and settings are kept')
     args = parser.parse_args()
     
@@ -160,7 +183,7 @@ def main():
         os.environ['SPLUNKVOYAGER_DB'] = str(DB_PATH)
         
         # Start the application with terminal UI
-        start_application()
+        start_application(open_browser=not args.no_browser)
             
     except Exception as e:
         logger.error(f"Error starting application: {str(e)}")
