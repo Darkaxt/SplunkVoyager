@@ -162,7 +162,7 @@ def api_network(slug):
     try:
         jid = wb.start_network(slug, d.get("base", ""), d.get("extract", ""), d.get("fields") or {},
                                d.get("earliest") or None, d.get("latest") or None, d.get("chunk") or "1d",
-                               d.get("title", ""))
+                               d.get("title", ""), bool(d.get("low_memory")))
         return jsonify({"status": "started", "job": jid})
     except (ValueError, FileNotFoundError) as e:
         return _err(e)

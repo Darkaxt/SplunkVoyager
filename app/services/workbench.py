@@ -119,6 +119,7 @@ def get_investigation(slug):
                                      and j["status"] not in ("running", "waiting", "queued"),
                     "report": (nd / "report.html").is_file() and f"network/{j['id']}/report.html",
                     "map": (nd / "attack_map.html").is_file() and f"network/{j['id']}/attack_map.html",
+                    "mode": _read(nd / "analysis.mode.json"),
                     "findings": _read(nd / "findings.json")})
     inv["network"] = net
     ed = d / "entities"
@@ -327,7 +328,8 @@ def _common_export_args(d):
 
 
 # ------------------------------------------------------------------ module: network analysis (Payload Analyzer)
-def start_network(slug, base, extract="", fields=None, earliest=None, latest=None, chunk="1d", title=""):
+def start_network(slug, base, extract="", fields=None, earliest=None, latest=None, chunk="1d", title="",
+                  low_memory=False):
     from network_feed import build_query
     d = inv_dir(slug)
     inv = _read(d / "investigation.json", {})
@@ -337,7 +339,8 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
     title = title.strip() or base.strip().splitlines()[0][:80]
     # the job id is known only after creation: create, then fill the paths in
     jid = _new_job(d, "network", title, [], meta={"base": base, "extract": extract, "fields": fields or {},
-                                                 "earliest": earliest, "latest": latest, "chunk": chunk, "spl": spl})
+                                                 "earliest": earliest, "latest": latest, "chunk": chunk, "spl": spl,
+                                                 "low_memory": bool(low_memory)})
     nd = jid_dir / jid
     nd.mkdir(parents=True, exist_ok=True)
     (nd / "query.spl").write_text(spl, encoding="utf-8")
@@ -352,7 +355,7 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
          "progress": [str(nd / "export" / "manifest.json")]},
         {"name": "Merge time windows", "argv": [PY, str(ROOT / "network_feed.py"), "merge", str(nd / "export"),
                                                 "-o", str(nd / "requests.jsonl")]},
-    ] + _analysis_steps(nd, f"Attack map · {title}")
+    ] + _analysis_steps(nd, f"Attack map · {title}", low_memory)
     job = _read(d / "jobs" / jid / "job.json")
     job["steps"] = steps
     _write(d / "jobs" / jid / "job.json", job)
@@ -360,11 +363,13 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
     return jid
 
 
-def _analysis_steps(nd, title="Attack map"):
+def _analysis_steps(nd, title="Attack map", low_memory=False):
     pa = ROOT / "payload_analyzer"
     return [
-        {"name": "Payload analysis", "argv": [PY, "-I", str(pa / "payload_analyzer.py"), "pipeline",
-                                              str(nd / "requests.jsonl"), "-o", str(nd / "analysis.json")]},
+        # two stages streamed through a JSON Lines intermediate (pipeline loads it whole: MemoryError on big logs)
+        {"name": "Payload analysis", "argv": [PY, str(ROOT / "network_feed.py"), "analyse",
+                                              str(nd / "requests.jsonl"), "-o", str(nd / "analysis.json")]
+                                             + (["--low-memory"] if low_memory else [])},
         {"name": "HTML report", "argv": [PY, "-I", str(pa / "report_builder.py"), str(nd / "analysis.json"),
                                          "-o", str(nd / "report.html")]},
         {"name": "Findings for the entity mapper", "argv": [PY, str(ROOT / "network_feed.py"), "iocs",
@@ -384,8 +389,10 @@ def reanalyze_network(slug, jid):
         st = job_status(d, j.name, tail=0)
         if st["status"] in ("running", "waiting", "queued") and (j.name == jid or (st.get("meta") or {}).get("target") == jid):
             raise RuntimeError("this run is already being processed")
-    title = _read(d / "jobs" / jid / "job.json", {}).get("title", jid)
-    new = _new_job(d, "reanalysis", f"Re-analyse: {title}", _analysis_steps(nd, f"Attack map · {title}"),
+    job = _read(d / "jobs" / jid / "job.json", {})
+    title = job.get("title", jid)
+    new = _new_job(d, "reanalysis", f"Re-analyse: {title}",
+                   _analysis_steps(nd, f"Attack map · {title}", (job.get("meta") or {}).get("low_memory")),
                    meta={"target": jid})
     _spawn(d / "jobs" / new)
     return new

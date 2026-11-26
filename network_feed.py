@@ -4,6 +4,10 @@
   python network_feed.py merge EXPORT_DIR -o requests.jsonl
         merges the per-window results of an export run into one line per (site, uri_path, uri_query):
         counts summed, first/last time kept, sources/statuses/actions united, times written in UTC
+  python network_feed.py analyse requests.jsonl -o analysis.json
+        Payload Analyzer in two stages (decode to a JSON Lines intermediate, then analyse it as a stream):
+        the same result as its `pipeline` command, which loads its whole intermediate into memory at once
+        and runs out of memory on large web logs
   python network_feed.py iocs analysis.json -o findings.json
         attack sources, callback hosts/URLs and targets from Payload Analyzer's output, ranked by requests
 """
@@ -124,6 +128,85 @@ def merge(export_dir, out):
     print(f"{rows:,} rows from the export windows -> {len(groups):,} request groups in {out}", file=sys.stderr)
 
 
+def _run_tee(argv):
+    """Run a stage, passing its output through, and tell whether it ran out of memory."""
+    import subprocess
+    p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                         errors="replace")
+    oom = False
+    for line in p.stdout:
+        sys.stderr.write(line)
+        oom = oom or "MemoryError" in line
+    return p.wait(), oom
+
+
+def analyse(requests_path, out, low_memory=False):
+    """
+    payload_assessor -> resolutions.jsonl.pax -> payload_analyzer, then the source fields point at the input.
+
+    Full mode includes unremarkable parameters, so series cover all traffic. Payload Analyzer keeps every
+    distinct parameter value in memory for that; on a large log it can run out. Then (or with low_memory) the
+    analysis runs on matched parameters only: the same attack findings, but series only over those parameters.
+    The mode used is written to <output>.mode.json.
+    """
+    import hashlib
+    pa = Path(__file__).resolve().parent / "payload_analyzer"
+    src, out = Path(requests_path).resolve(), Path(out).resolve()
+    res = out.with_name(".resolutions-" + out.stem + ".jsonl.pax")      # keyed container, like the pipeline's own
+    mode_file = out.with_name(out.stem + ".mode.json")
+    modes = ["matched-only"] if low_memory else ["full", "matched-only"]
+    try:
+        for mode in modes:
+            assess = [sys.executable, "-I", str(pa / "payload_assessor.py"), str(src), "-o", str(res), "--format", "jsonl"]
+            if mode == "full":
+                assess.append("--include-unmatched")
+            rc, oom = _run_tee(assess)
+            if rc == 0:
+                rc, oom = _run_tee([sys.executable, "-I", str(pa / "payload_analyzer.py"), str(res), "-o", str(out)])
+            if rc == 0:
+                break
+            if oom and mode == "full":
+                print("\nOut of memory with every parameter included: running again on matched parameters only "
+                      "(same attack findings; series only over those parameters).\n", file=sys.stderr, flush=True)
+                continue
+            raise SystemExit(rc)
+        mode_file.write_text(json.dumps({"mode": mode, "reason": "low-memory option" if low_memory else
+                                         ("out of memory in full mode" if mode != "full" else "")}), encoding="utf-8")
+        h = hashlib.sha256()
+        with open(src, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        old_sha = hashlib.sha256()
+        # the analyzer hashes the decoded intermediate; recompute it the same way to find it in the output
+        sys.path.insert(0, str(pa))
+        import paxio
+        with paxio.open_binary_in(res) as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                old_sha.update(chunk)
+        repl = [(json.dumps(str(res)), json.dumps(str(src))), (json.dumps(old_sha.hexdigest()), json.dumps(h.hexdigest()))]
+        for f in [out] + sorted(out.parent.glob(out.name.split(".")[0] + ".determined*")):
+            _replace_all(f, repl)
+    finally:
+        res.unlink(missing_ok=True)
+
+
+def _replace_all(path, repl, chunk=1 << 20):
+    """Replace every occurrence of each (unique) string, streaming the file; matches across chunk edges included."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    keep = max(len(a) for a, _ in repl) - 1
+    with open(path, "r", encoding="utf-8", newline="") as fi, open(tmp, "w", encoding="utf-8", newline="") as fo:
+        buf = ""
+        for part in iter(lambda: fi.read(chunk), ""):
+            buf += part
+            for a, b in repl:
+                buf = buf.replace(a, b)
+            fo.write(buf[:-keep] if keep and len(buf) > keep else "" if keep else buf)
+            buf = buf[-keep:] if keep and len(buf) > keep else ("" if not keep else buf)
+        fo.write(buf)
+    os.replace(tmp, path)
+
+
 NOT_ATTACK = {"not_attack", "undetermined", None}
 
 
@@ -196,6 +279,11 @@ def main():
     m = sub.add_parser("merge")
     m.add_argument("export_dir")
     m.add_argument("-o", "--output", required=True)
+    an = sub.add_parser("analyse", help="run Payload Analyzer on merged requests without loading everything at once")
+    an.add_argument("requests")
+    an.add_argument("-o", "--output", required=True)
+    an.add_argument("--low-memory", action="store_true",
+                    help="matched parameters only: much less memory, same attack findings, series only over them")
     i = sub.add_parser("iocs")
     i.add_argument("analysis")
     i.add_argument("-o", "--output", required=True)
@@ -207,6 +295,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == "merge":
         merge(a.export_dir, a.output)
+    elif a.cmd == "analyse":
+        analyse(a.requests, a.output, a.low_memory)
     elif a.cmd == "iocs":
         iocs(a.analysis, a.output)
     else:

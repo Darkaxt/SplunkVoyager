@@ -59,6 +59,9 @@
       </div>
       <div class="hint">Empty = the investigation's range. Smaller windows for busy logs: each window is one Splunk job.</div>
       <label class="f">Label (optional)</label><input type="text" id="na-title" placeholder="e.g. Shop front-end">
+      <label class="hint" style="display:block;margin-top:8px;cursor:pointer"><input type="checkbox" id="na-low">
+        Low-memory analysis: matched parameters only (same attack findings, series only over those parameters).
+        Used automatically if the full analysis runs out of memory.</label>
       <details><summary>Show the SPL that will run</summary><pre class="spl" id="na-spl">-</pre></details>
       <div class="actions"><button class="primary" id="na-run">Run network analysis</button><span class="err" id="na-err"></span></div>
     </div>
@@ -107,6 +110,7 @@
   <div class="panel full">
     <div class="toolbar"><h2 style="margin:0">Jobs</h2><span class="sub">Running jobs keep going if you close this page or restart Voyager.</span></div>
     <div id="jobs"></div>
+    <div id="logs"></div>
   </div>
 </div>
 {% endblock %}

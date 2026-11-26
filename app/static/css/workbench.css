@@ -30,6 +30,8 @@
 .wb details summary { cursor:pointer; color:var(--muted); font-size:12.5px; margin-top:10px; }
 .wb pre, .wb .mono { font-family:Consolas, "SFMono-Regular", Menlo, monospace; font-size:12px; }
 .wb pre.spl { background:var(--bg); border:1px solid var(--line); border-radius:5px; padding:8px; white-space:pre-wrap; color:#c9d1d9; margin-top:6px; }
+.wb .logbox { margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+.wb pre.log { overflow-wrap:anywhere; word-break:break-word; max-width:100%; }
 .wb pre.log { background:#111214; border:1px solid var(--line); border-radius:5px; padding:8px; max-height:340px; overflow:auto;
   white-space:pre-wrap; color:#c9d1d9; margin:8px 0 0; }
 .wb table.t { width:100%; border-collapse:collapse; font-size:13px; }

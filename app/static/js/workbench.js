@@ -142,7 +142,7 @@ const WB = (() => {
     const naFields = () => Object.fromEntries([...document.querySelectorAll('.na-f')].map(i => [i.dataset.k, i.value.trim()]));
     const naBody = () => ({base: $('#na-base').value, extract: $('#na-extract').value, fields: naFields(),
       earliest: $('#na-earliest').value.trim(), latest: $('#na-latest').value.trim(), chunk: $('#na-chunk').value,
-      title: $('#na-title').value});
+      title: $('#na-title').value, low_memory: $('#na-low').checked});
     let tPrev;
     const preview = () => { clearTimeout(tPrev); tPrev = setTimeout(async () => {
       if (!$('#na-base').value.trim()) { $('#na-spl').textContent = '-'; return; }
@@ -190,6 +190,7 @@ const WB = (() => {
         const chk = v => mapped.has(String(v).toLowerCase()) ? '' : `<input type="checkbox" class="sel" value="${esc(v)}">`;
         const src = (f.sources || []).slice(0, 50), cb = (f.callbacks || []).slice(0, 50);
         return `<div class="nrun" style="margin-bottom:18px">
+          ${n.mode && n.mode.mode === 'matched-only' ? `<div class="note warn" style="margin:0 0 8px">Analysed on matched parameters only (${esc(n.mode.reason)}): attack findings are complete; series cover only those parameters.</div>` : ''}
           <div class="toolbar"><div><b>${esc(n.title)}</b> ${badge(n.status)}
             ${cats.map(([k, v]) => `<span class="badge cat">${esc(k)} ${v}</span>`).join('')}</div>
             <div>${n.report ? `<a class="b" target="_blank" href="/inv/${slug}/files/${esc(n.report)}">Open report</a>` : ''}
@@ -258,12 +259,12 @@ const WB = (() => {
               <button data-log="${esc(j.id)}">${openLogs.has(j.id) ? 'Hide log' : 'Log'}</button>
               ${!running && j.kind !== 'reanalysis' ? `<button class="danger" data-act="delete" data-j="${esc(j.id)}" title="${j.kind === 'network' ? 'Remove this run: its log, export, report and re-analyses' : 'Remove this job and its log'}">✕</button>` : ''}
             </td></tr>
-            ${openLogs.has(j.id) ? `<tr><td colspan="6"><pre class="log" id="log-${esc(j.id)}">${esc(j.log || '')}</pre></td></tr>` : ''}`;
+`;
         }).join('') + '</table>';
     }
     $('#jobs').addEventListener('click', async e => {
       const l = e.target.closest('[data-log]');
-      if (l) { openLogs.has(l.dataset.log) ? openLogs.delete(l.dataset.log) : openLogs.add(l.dataset.log); render(last); return; }
+      if (l) { openLogs.has(l.dataset.log) ? openLogs.delete(l.dataset.log) : openLogs.add(l.dataset.log); renderLogs(last, true); force = true; render(last); return; }
       const a = e.target.closest('[data-act]');
       if (!a) return;
       if (a.dataset.act === 'delete' && !confirm(a.title + '?')) return;
@@ -272,22 +273,57 @@ const WB = (() => {
       refresh();
     });
 
+    // A section is only redrawn when its content changed, and never while you are selecting text in it.
+    let force = false;
+    const selecting = el => { const s = getSelection(); return s && !s.isCollapsed && s.rangeCount && el.contains(s.getRangeAt(0).commonAncestorContainer); };
+    function setHtml(el, html) {
+      if (el._html === html && !force) return;
+      if (selecting(el)) return;
+      el._html = html; el.innerHTML = html;
+    }
+    const logPanels = new Map();   // job id -> {box, pre, text}
+    async function copyText(text, btn) {
+      try { await navigator.clipboard.writeText(text); }
+      catch (e) {                 // older browsers / non-secure origins
+        const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
+      }
+      const t = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = t; }, 1200);
+    }
+    function renderLogs(inv) {
+      const host = $('#logs');
+      for (const [id, p] of logPanels) if (!openLogs.has(id)) { p.box.remove(); logPanels.delete(id); }
+      for (const j of inv.jobs) {
+        if (!openLogs.has(j.id)) continue;
+        let p = logPanels.get(j.id);
+        if (!p) {
+          const box = document.createElement('div');
+          box.className = 'logbox';
+          box.innerHTML = `<div class="toolbar"><div><b>Log</b> · ${esc(j.title)} <span class="muted mono">${esc(j.id)}</span></div>
+            <div><button data-copy>Copy</button> <button data-close>Close</button></div></div><pre class="log"></pre>`;
+          box.querySelector('[data-close]').onclick = () => { openLogs.delete(j.id); renderLogs(last); force = true; render(last); };
+          box.querySelector('[data-copy]').onclick = async ev => copyText(await api(`${base}/jobs/${j.id}/log?tail=1000000`), ev.target);
+          host.append(box);
+          p = {box, pre: box.querySelector('pre'), text: null};
+          logPanels.set(j.id, p);
+        }
+        if (j.log == null || j.log === p.text || selecting(p.pre)) continue;
+        const atEnd = p.pre.scrollHeight - p.pre.clientHeight - p.pre.scrollTop < 20;
+        p.pre.textContent = j.log; p.text = j.log;
+        if (atEnd) p.pre.scrollTop = p.pre.scrollHeight;
+      }
+    }
     function render(inv) {
       if (!inv) return;
       last = inv;
-      // keep log scroll positions
-      const scroll = {};
-      document.querySelectorAll('pre.log').forEach(p => { scroll[p.id] = [p.scrollTop, p.scrollHeight - p.clientHeight - p.scrollTop < 20]; });
-      $('#em-state').innerHTML = entityHtml(inv);
+      setHtml($('#em-state'), entityHtml(inv));
       const sel = new Set([...document.querySelectorAll('#nf .sel:checked')].map(c => c.value));
-      $('#nf').innerHTML = findingsHtml(inv);
+      setHtml($('#nf'), findingsHtml(inv));
       document.querySelectorAll('#nf .sel').forEach(c => { if (sel.has(c.value)) c.checked = true; });
       $('#nf-sub').textContent = inv.network.length ? `${inv.network.length} run${inv.network.length > 1 ? 's' : ''}` : '';
-      $('#jobs').innerHTML = jobsHtml(inv);
-      document.querySelectorAll('pre.log').forEach(p => {
-        const s = scroll[p.id];
-        p.scrollTop = !s || s[1] ? p.scrollHeight : s[0];
-      });
+      setHtml($('#jobs'), jobsHtml(inv));
+      renderLogs(inv);
+      force = false;
     }
     let busy = false;
     async function refresh() {
