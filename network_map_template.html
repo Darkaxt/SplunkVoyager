@@ -5,175 +5,158 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
 <style>
-:root { --bg:#070b14; --panel:rgba(14,20,34,.86); --line:#1c2742; --text:#d7e1f5; --muted:#7f8db0; --accent:#38bdf8;
-        --p0:#4aa3ff; --p1:#f5b942; --p2:#ff4d5e; --p3:#ff2e88; }
+:root { --bg:#060a13; --panel:rgba(12,18,32,.88); --line:#1c2742; --text:#d7e1f5; --muted:#7f8db0; --accent:#38bdf8; }
 * { box-sizing:border-box; }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:13px/1.4 "Segoe UI", system-ui, sans-serif; overflow:hidden; }
-body { background: radial-gradient(1200px 700px at 50% 40%, #0e1a33 0%, var(--bg) 70%); }
 button, select, input { font:inherit; color:var(--text); background:#0f1830; border:1px solid var(--line); border-radius:5px; padding:4px 9px; }
-button { cursor:pointer; } button:hover { border-color:var(--accent); }
-button.on { background:#123457; border-color:var(--accent); }
-#top { position:absolute; left:0; right:0; top:0; height:52px; display:flex; align-items:center; gap:10px; padding:0 14px;
-       background:linear-gradient(#0b1224, rgba(11,18,36,.6)); border-bottom:1px solid var(--line); z-index:5; }
-#top h1 { font-size:15px; margin:0 10px 0 0; font-weight:600; letter-spacing:.02em; white-space:nowrap; }
+button { cursor:pointer; } button:hover { border-color:var(--accent); } button.on { background:#123457; border-color:var(--accent); }
+button.rec { border-color:#ff4d5e; color:#ff9aa4; } button.rec.on { background:#4a1119; }
+#top { position:absolute; left:0; right:0; top:0; min-height:48px; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:7px 12px;
+       background:linear-gradient(#0b1224, rgba(11,18,36,.75)); border-bottom:1px solid var(--line); z-index:5; }
+#top h1 { font-size:14px; margin:0 6px 0 0; font-weight:600; white-space:nowrap; max-width:280px; overflow:hidden; text-overflow:ellipsis; }
 #top h1 b { color:var(--accent); }
-#clock { font:600 14px Consolas, monospace; color:#fff; min-width:150px; text-align:center; }
-.sep { width:1px; height:26px; background:var(--line); }
-.ctl { display:flex; gap:6px; align-items:center; color:var(--muted); white-space:nowrap; }
-#stage { position:absolute; left:258px; right:360px; top:52px; bottom:128px; overflow-y:auto; overflow-x:hidden; }
-#stage svg, #stage canvas { position:absolute; left:0; top:0; }
-#stage canvas { pointer-events:none; }
-.lbl { font:12px Consolas, monospace; fill:#b8c6e3; }
-.lbl.site { fill:#e6eeff; font-weight:600; }
-.lbl.path { fill:#9fb1d6; }
-.node { cursor:pointer; }
-.arc { fill:none; cursor:pointer; }
-.arc:hover { stroke-opacity:1 !important; }
-.sel .lbl { fill:#fff; }
-.toggle { fill:#38bdf8; font:700 12px Consolas, monospace; cursor:pointer; }
-#hud { position:absolute; left:14px; top:66px; width:230px; background:var(--panel); border:1px solid var(--line);
-       border-radius:8px; padding:12px; z-index:4; pointer-events:auto; }
-#hud .big { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-#hud .big div { background:#0b1327; border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
-#hud .big b { display:block; font:700 18px Consolas, monospace; color:#fff; }
-#hud .big span { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
-#hud h3, #feedbox h3, #det h3 { margin:12px 0 6px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
-.catrow { display:flex; align-items:center; gap:6px; margin:3px 0; cursor:pointer; user-select:none; }
-.catrow i { width:10px; height:10px; border-radius:50%; flex:none; box-shadow:0 0 8px currentColor; }
+#clock { font:600 13px Consolas, monospace; color:#fff; min-width:140px; text-align:center; }
+.ctl { display:flex; gap:5px; align-items:center; color:var(--muted); white-space:nowrap; }
+#stage { position:absolute; left:0; right:0; bottom:116px; }
+#cv { position:absolute; left:0; top:0; width:100%; height:100%; display:block; }
+.panel { position:absolute; background:var(--panel); border:1px solid var(--line); border-radius:8px; z-index:4; }
+#hud { left:12px; width:214px; padding:10px 11px; }
+#hud .big { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+#hud .big div { background:#0b1327; border:1px solid var(--line); border-radius:6px; padding:5px 7px; }
+#hud .big b { display:block; font:700 16px Consolas, monospace; color:#fff; }
+#hud .big span { color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; }
+h3 { margin:10px 0 5px; font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+.catrow { display:flex; align-items:center; gap:6px; margin:2px 0; cursor:pointer; user-select:none; }
+.catrow i { width:9px; height:9px; border-radius:50%; flex:none; box-shadow:0 0 7px currentColor; }
 .catrow .n { margin-left:auto; font-family:Consolas, monospace; color:#fff; }
 .catrow.off { opacity:.35; }
-#feedbox { position:absolute; right:14px; top:66px; width:332px; max-height:calc(100% - 210px); background:var(--panel);
-           border:1px solid var(--line); border-radius:8px; padding:10px 12px; z-index:4; display:flex; flex-direction:column; }
-#feed { overflow:hidden; font:11.5px Consolas, monospace; }
-#feed div { padding:4px 0; border-bottom:1px solid #121c33; animation:fade .6s ease-out; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#feedbox { right:12px; width:310px; padding:9px 11px; display:flex; flex-direction:column; }
+#feed { overflow:hidden; font:11px Consolas, monospace; }
+#feed div { padding:3px 0; border-bottom:1px solid #121c33; animation:fade .6s ease-out; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #feed .t { color:var(--muted); }
 @keyframes fade { from { background:rgba(56,189,248,.18); } to { background:transparent; } }
-#det { position:absolute; right:14px; top:66px; bottom:140px; width:460px; background:rgba(10,15,28,.97); border:1px solid var(--line);
-       border-radius:8px; padding:12px 14px; z-index:6; overflow:auto; display:none; }
-#det h2 { margin:0 0 2px; font:600 15px Consolas, monospace; word-break:break-all; color:#fff; }
-#det .x { position:absolute; right:10px; top:8px; }
-#det dl { display:grid; grid-template-columns:120px 1fr; gap:3px 10px; margin:8px 0; }
+.panel .hide { position:absolute; right:6px; top:5px; padding:0 6px; font-size:11px; }
+#det { right:12px; width:450px; padding:12px 14px; z-index:6; overflow:auto; display:none; background:rgba(9,14,26,.97); }
+#det h2 { margin:0 0 2px; font:600 14px Consolas, monospace; word-break:break-all; color:#fff; padding-right:30px; }
+#det dl { display:grid; grid-template-columns:118px 1fr; gap:3px 10px; margin:8px 0; }
 #det dt { color:var(--muted); } #det dd { margin:0; font-family:Consolas, monospace; }
-.lv { display:inline-block; padding:1px 8px; border-radius:10px; font-weight:700; font-size:11.5px; }
+.lv { display:inline-block; padding:1px 8px; border-radius:10px; font-weight:700; font-size:11px; }
 .lv0 { background:#10284a; color:#7cc0ff; } .lv1 { background:#3b2a07; color:#f5c062; } .lv2 { background:#47121a; color:#ff8b96; }
 .lv3 { background:#4a0f30; color:#ff7ab8; box-shadow:0 0 10px rgba(255,46,136,.5); }
 .ph { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
 table.p { width:100%; border-collapse:collapse; font-size:11.5px; }
-table.p td, table.p th { border-bottom:1px solid #16213b; padding:4px 4px; vertical-align:top; text-align:left; }
+table.p td, table.p th { border-bottom:1px solid #16213b; padding:4px; vertical-align:top; text-align:left; }
 table.p th { color:var(--muted); font-weight:500; }
 table.p .v { font-family:Consolas, monospace; word-break:break-all; color:#e9f0ff; }
 .muted { color:var(--muted); }
-#tl { position:absolute; left:0; right:0; bottom:0; height:128px; background:rgba(8,12,24,.95); border-top:1px solid var(--line); z-index:5; }
+#tl { position:absolute; left:0; right:0; bottom:0; height:116px; background:rgba(8,12,24,.96); border-top:1px solid var(--line); z-index:5; }
 #tl svg { width:100%; height:100%; cursor:crosshair; }
-#about { position:absolute; left:14px; bottom:140px; width:430px; background:rgba(10,15,28,.97); border:1px solid var(--line);
-         border-radius:8px; padding:12px 14px; z-index:6; display:none; }
+#about { left:12px; bottom:128px; width:430px; padding:12px 14px; z-index:6; display:none; background:rgba(9,14,26,.97); }
 #about p { margin:6px 0; }
-.empty { color:var(--muted); padding:30px; text-align:center; }
+#tip { position:absolute; z-index:7; pointer-events:none; background:rgba(9,14,26,.95); border:1px solid var(--line); border-radius:6px;
+       padding:5px 8px; font:11.5px Consolas, monospace; display:none; max-width:420px; }
+#showhud, #showfeed { position:absolute; z-index:4; display:none; }
 </style>
 </head>
 <body>
 <div id="top">
   <h1><b>●</b> <span id="ttl"></span></h1>
-  <button id="play">▶ Play</button>
-  <button id="back" title="previous step with attacks">◀</button><button id="fwd" title="next step with attacks">▶</button>
+  <button id="play">▶ Play</button><button id="back" title="previous attack">◀</button><button id="fwd" title="next attack">▶</button>
   <div id="clock"></div>
   <div class="ctl">step <select id="step"><option value="300">5 min</option><option value="900">15 min</option><option value="3600">1 hour</option><option value="86400">1 day</option></select></div>
-  <div class="ctl">speed <select id="speed"><option>1</option><option>2</option><option selected>4</option><option>8</option><option>16</option></select>/s</div>
-  <div class="ctl"><select id="mode"><option value="cum">everything so far</option><option value="win">last 6 steps only</option><option value="all">whole period</option></select></div>
-  <div class="sep"></div>
+  <div class="ctl">speed <select id="speed"><option value="0.5">0.5</option><option value="1">1</option><option value="2" selected>2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>steps/s</div>
+  <div class="ctl"><select id="mode"><option value="cum">keep history</option><option value="live">active only</option></select></div>
   <div class="ctl"><button id="gsites" class="on">sites</button><button id="gpaths">paths</button></div>
   <div class="ctl">colour <select id="colour"><option value="phase">by phase</option><option value="cat">by attack type</option></select></div>
   <div class="ctl">level ≥ <select id="minlv"><option value="0">all</option><option value="1">enumeration</option><option value="2">extraction</option><option value="3">sustained</option></select></div>
-  <div class="ctl"><input id="q" placeholder="filter address / site / path" style="width:190px"></div>
+  <div class="ctl"><input id="q" placeholder="filter address / site / path" style="width:170px"></div>
+  <button id="recb" class="rec" title="Plays from the start and records the map to a video file">● Record video</button>
   <button id="aboutb">Levels?</button>
 </div>
-<div id="stage"><svg id="g"></svg><canvas id="fx"></canvas></div>
-<div id="hud">
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="hud" class="panel"><button class="hide" data-hide="hud">–</button>
   <div class="big"><div><b id="c-pay">0</b><span>payloads</span></div><div><b id="c-req">0</b><span>requests</span></div>
-    <div><b id="c-src">0</b><span>sources</span></div><div><b id="c-site">0</b><span>sites</span></div></div>
+    <div><b id="c-src">0</b><span>sources</span></div><div><b id="c-act">0</b><span>active now</span></div></div>
   <h3>Attack types</h3><div id="cats"></div>
   <h3>Phase reached</h3><div id="phases"></div>
+  <h3>Legend</h3>
+  <div class="muted" style="font-size:11.5px">Arrow: attack in progress · comet: new payload · <span style="color:#ff3b5c">■ packets flowing back</span>: extraction payloads active (data requested back) · node colour: level</div>
 </div>
-<div id="feedbox"><h3 style="margin-top:0">Live feed</h3><div id="feed"></div></div>
-<div id="det"><button class="x" id="detx">✕</button><div id="detc"></div></div>
-<div id="about"></div>
+<button id="showhud">▤ stats</button>
+<div id="feedbox" class="panel"><button class="hide" data-hide="feedbox">–</button><h3 style="margin-top:0">Live feed</h3><div id="feed"></div></div>
+<button id="showfeed">▤ feed</button>
+<div id="det" class="panel"><button class="hide" id="detx">✕</button><div id="detc"></div></div>
+<div id="about" class="panel"></div>
+<div id="tip"></div>
 <div id="tl"><svg id="tls"></svg></div>
 <script>
 const D = __DATA__;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const PH = D.phase_rank, PHCOL = ['#4aa3ff', '#f5b942', '#ff4d5e'], LVCOL = ['#4aa3ff', '#f5b942', '#ff4d5e', '#ff2e88'];
-const LVN = D.levels.map(l => l.name);
+const PH = D.phase_rank, PHCOL = ['#3d9bff', '#f5b942', '#ff3b5c'], LVCOL = ['#3d9bff', '#f5b942', '#ff3b5c', '#ff2e88'];
+const LEAK = '#ff3b5c', LVN = D.levels.map(l => l.name);
 const catCol = c => (D.cats[c] || {}).color || '#9aa7c7', catLbl = c => (D.cats[c] || {}).label || c;
-const fmt = t => { const d = new Date(t * 1000); return d.toISOString().slice(0, 16).replace('T', ' ') + 'Z'; };
+const fmt = t => new Date(t * 1000).toISOString().slice(0, 16).replace('T', ' ') + 'Z';
 const units = new Map(D.units.map(u => [u.id, u]));
 const EV = D.events.slice().sort((a, b) => a.t - b.t);
 const T0 = EV.length ? EV[0].t : 0, T1 = EV.length ? EV[EV.length - 1].t : 0;
-$('#ttl').textContent = D.title;
+$('#ttl').textContent = D.title; $('#ttl').title = D.title;
 const hiddenSrc = new Set(D.sources.filter(s => !s.shown).map(s => s.id));
 const srcInfo = new Map(D.sources.map(s => [s.id, s])), siteInfo = new Map(D.sites.map(s => [s.id, s]));
 const pairLv = new Map(D.pairs.map(p => [p.src + '\t' + p.site, p]));
 const pathPairLv = new Map(D.path_pairs.map(p => [p.src + '\t' + p.site + '\t' + p.path, p]));
 const pathLv = new Map(D.paths.map(p => [p.site + '\t' + p.path, p.level]));
-const offCats = new Set();
-const expanded = new Set();
-let STEP = (T1 - T0) > 3 * 86400 ? 3600 : 300, cur = T0, timer = null, sel = null;
+const offCats = new Set(), expanded = new Set();
+let STEP = (T1 - T0) > 3 * 86400 ? 3600 : 300, cur = T1, playing = false, sel = null, hover = null;
 $('#step').value = String(STEP);
-if (!EV.length) { document.body.insertAdjacentHTML('beforeend', '<div class="empty" style="position:absolute;top:45%;width:100%">No attack payloads in this analysis.</div>'); }
 
-// ------------------------------------------------------------ filtering and model at the cursor
-const srcKey = e => hiddenSrc.has(e.src) ? '(other sources)' : e.src;
+// ------------------------------------------------------------------ filters and per-arc activity
+const OTHER = '(other sources)';
+const srcKey = e => hiddenSrc.has(e.src) ? OTHER : e.src;
 const tgtKey = e => expanded.has(e.site) ? e.site + '\t' + e.path : e.site;
 function visible(e) {
   if (offCats.has(e.cat)) return false;
   const lv = +$('#minlv').value;
-  if (lv) {
-    const p = pairLv.get(e.src + '\t' + e.site);
-    if (!p || p.level < lv) return false;
-  }
+  if (lv) { const p = pairLv.get(e.src + '\t' + e.site); if (!p || p.level < lv) return false; }
   const q = $('#q').value.trim().toLowerCase();
-  if (q && !(e.src.toLowerCase().includes(q) || e.site.toLowerCase().includes(q) || (e.path || '').toLowerCase().includes(q))) return false;
-  return true;
+  return !q || e.src.toLowerCase().includes(q) || e.site.toLowerCase().includes(q) || (e.path || '').toLowerCase().includes(q);
 }
-function window_() {
-  const m = $('#mode').value;
-  if (m === 'all') return [-Infinity, Infinity];
-  if (m === 'win') return [cur - 6 * STEP, cur + STEP];
-  return [-Infinity, cur + STEP];
-}
-function model() {
-  const [a, b] = window_();
-  const S = new Map(), T = new Map(), A = new Map();
-  let pay = new Set(), req = 0;
-  const cats = new Map(), phases = [0, 0, 0];
-  for (const e of EV) {
-    if (e.t >= b) break;
-    if (e.t < a || !visible(e)) continue;
-    const s = srcKey(e), t = tgtKey(e), r = PH[e.phase] ?? 0;
-    const sn = S.get(s) || S.set(s, {id: s, pay: new Set(), req: 0, max: 0, first: e.t}).get(s);
-    sn.pay.add(e.u); sn.req += e.n; sn.max = Math.max(sn.max, r);
-    const tn = T.get(t) || T.set(t, {id: t, pay: new Set(), req: 0, max: 0, first: e.t}).get(t);
-    tn.pay.add(e.u); tn.req += e.n; tn.max = Math.max(tn.max, r);
-    const k = s + '\n' + t;
-    const an = A.get(k) || A.set(k, {s, t, pay: new Set(), req: 0, max: 0, cats: new Map(), last: e.t}).get(k);
-    an.pay.add(e.u); an.req += e.n; an.max = Math.max(an.max, r); an.last = e.t;
-    an.cats.set(e.cat, (an.cats.get(e.cat) || 0) + 1);
-    pay.add(e.u); req += e.n;
-    cats.set(e.cat, (cats.get(e.cat) || new Set()).add(e.u));
+// An attack is "present" from a payload's first to its last time seen (repeats), bridged over short gaps.
+let ARCS = new Map(), VEV = [];
+function buildArcs() {
+  VEV = EV.filter(visible);
+  const linger = Math.max(STEP * 1.5, 600);
+  const m = new Map();
+  for (const e of VEV) {
+    const k = srcKey(e) + '\n' + tgtKey(e), u = units.get(e.u) || {};
+    let a = m.get(k);
+    if (!a) m.set(k, a = {k, s: srcKey(e), t: tgtKey(e), iv: [], leak: [], ev: []});
+    const end = Math.max(e.t, Date.parse((u.last || '').replace(' ', 'T') + 'Z') / 1000 || e.t);
+    a.iv.push([e.t, end]); a.ev.push(e);
+    if (e.phase === 'extraction') a.leak.push([e.t, end]);
   }
-  const phaseSets = [new Set(), new Set(), new Set()];
-  for (const e of EV) { if (e.t >= b) break; if (e.t >= a && visible(e)) phaseSets[PH[e.phase] ?? 0].add(e.u); }
-  return {S, T, A, pay: pay.size, req, cats, phaseSets};
+  const merge = ivs => { ivs.sort((x, y) => x[0] - y[0]); const out = [];
+    for (const [a, b] of ivs) { const L = out[out.length - 1]; if (L && a <= L[1] + linger) L[1] = Math.max(L[1], b); else out.push([a, b]); }
+    return out.map(([a, b]) => [a, b + linger]); };
+  m.forEach(a => { a.iv = merge(a.iv); a.leak = merge(a.leak); a.anim = {on: false, grow: 1, fade: 0, leakOn: false, leakFade: 0}; });
+  ARCS = m;
 }
+const inIv = (ivs, t) => ivs.some(([a, b]) => t >= a && t <= b);
 
-// ------------------------------------------------------------ layout (all nodes of the whole period, stable positions)
-let L = null;
+// ------------------------------------------------------------------ layout (compact, measured labels)
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let L = null, W = 0, H = 0, DPR = 1, maxScroll = 0, scrollY = 0;
+const insets = () => ({l: $('#hud').style.display === 'none' ? 12 : 238,
+                       r: ($('#feedbox').style.display === 'none' && $('#det').style.display !== 'block') ? 12 : ($('#det').style.display === 'block' ? 474 : 334)});
 function layout() {
-  const st = $('#stage'), W = st.clientWidth, H0 = st.clientHeight;
-  // sources: every visible source over the whole period, ordered by first attack
+  const st = $('#stage'), th = $('#top').offsetHeight; st.style.top = th + 'px';
+  W = st.clientWidth; H = st.clientHeight; DPR = devicePixelRatio || 1;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ['#hud', '#feedbox', '#det', '#showhud', '#showfeed'].forEach(s => { $(s).style.top = (th + 10) + 'px'; });
+  $('#det').style.bottom = '128px'; $('#feedbox').style.maxHeight = (H - 30) + 'px';
+  $('#showhud').style.left = '12px'; $('#showfeed').style.right = '12px';
   const srcs = new Map(), tg = new Map();
-  for (const e of EV) {
-    if (!visible(e)) continue;
+  for (const e of VEV) {
     const s = srcKey(e); if (!srcs.has(s)) srcs.set(s, e.t);
     if (!tg.has(e.site)) tg.set(e.site, {first: e.t, paths: new Map()});
     const p = tg.get(e.site).paths; if (!p.has(e.path)) p.set(e.path, e.t);
@@ -181,267 +164,352 @@ function layout() {
   const rows = [];
   [...tg.entries()].sort((a, b) => a[1].first - b[1].first).forEach(([site, v]) => {
     if (expanded.has(site)) {
-      rows.push({id: site, kind: 'sitehead', site});
+      rows.push({id: site + '\thead', kind: 'head', site, npaths: v.paths.size});
       [...v.paths.entries()].sort((a, b) => a[1] - b[1]).forEach(([p]) => rows.push({id: site + '\t' + p, kind: 'path', site, path: p}));
     } else rows.push({id: site, kind: 'site', site, npaths: v.paths.size});
   });
   const sl = [...srcs.entries()].sort((a, b) => a[1] - b[1]).map(([s]) => s);
-  const rowH = 22, top = 24, n = Math.max(sl.length, rows.length);
-  const H = Math.max(H0, top * 2 + n * rowH);
-  const xs = Math.min(190, W * .22), xt = W - Math.min(230, W * .3);
-  const ys = (i, cnt) => top + (cnt <= 1 ? (H - 2 * top) / 2 : i * (H - 2 * top) / (cnt - 1));
-  L = {W, H, xs, xt, src: new Map(sl.map((s, i) => [s, ys(i, sl.length)])), tgt: new Map(rows.map((r, i) => [r.id, {...r, y: ys(i, rows.length)}]))};
-  // a collapsed site's events land on the site; an expanded site's on its path rows (the head row is a label)
-  const svg = $('#g'), cv = $('#fx');
-  svg.setAttribute('width', W); svg.setAttribute('height', H);
-  cv.width = W * devicePixelRatio; cv.height = H * devicePixelRatio; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  ctx.font = '600 12px Consolas, monospace';
+  const lab = s => s === OTHER ? `${D.hidden_sources} other sources` : s;
+  const srcLabW = Math.min(240, Math.max(60, ...sl.map(s => ctx.measureText(lab(s)).width)));
+  const tgtLabW = Math.min(300, Math.max(80, ...rows.map(r => ctx.measureText(r.kind === 'path' ? r.path : r.site + (r.npaths > 1 ? `  (${r.npaths} paths)` : '')).width + (r.kind === 'path' ? 16 : 0))));
+  const ins = insets(), avail = W - ins.l - ins.r;
+  const span = Math.max(200, Math.min(600, avail - srcLabW - tgtLabW - 80));
+  const used = srcLabW + 26 + span + 30 + tgtLabW;
+  const x0 = ins.l + Math.max(0, (avail - used) / 2);
+  const xs = x0 + srcLabW + 26, xt = xs + span;
+  // fixed spacing for sites, tighter for paths; sources spread over the targets' height only when they are few
+  const rh = r => r.kind === 'path' ? 22 : r.kind === 'head' ? 26 : 36;
+  const tH = rows.reduce((h, r) => h + rh(r), 0);
+  const sH = Math.max(sl.length * 24, Math.min(tH, sl.length * 56));
+  const blockH = Math.max(tH, sH), top = Math.max(26, (H - blockH) / 2);
+  const tgt = new Map(); let y = top + (blockH - tH) / 2;
+  rows.forEach(r => { tgt.set(r.id, {...r, y: y + rh(r) / 2}); y += rh(r); });
+  const sy = top + (blockH - sH) / 2, sstep = sl.length ? sH / sl.length : 0;
+  const src = new Map(sl.map((s, i) => [s, sy + (i + .5) * sstep]));
+  L = {xs, xt, src, tgt, lab};
+  maxScroll = Math.max(0, top + blockH + 26 - H); scrollY = Math.min(scrollY, maxScroll);
+}
+cv.addEventListener('wheel', e => { if (!maxScroll) return; scrollY = Math.max(0, Math.min(maxScroll, scrollY + e.deltaY)); e.preventDefault(); }, {passive: false});
+function arcGeo(a) {
+  const y1 = L.src.get(a.s), r = L.tgt.get(a.t); if (y1 == null || !r) return null;
+  const x1 = L.xs + 7, x2 = L.xt - 9, y2 = r.y, cx = (x1 + x2) / 2, cy = (y1 + y2) / 2 - Math.max(26, Math.abs(y2 - y1) * .15) - (x2 - x1) * .07;
+  return {x1, y1, x2, y2, cx, cy};
+}
+const qpt = (g, k) => { const q = 1 - k; return [q * q * g.x1 + 2 * q * k * g.cx + k * k * g.x2, q * q * g.y1 + 2 * q * k * g.cy + k * k * g.y2]; };
+const qtan = (g, k) => [2 * (1 - k) * (g.cx - g.x1) + 2 * k * (g.x2 - g.cx), 2 * (1 - k) * (g.cy - g.y1) + 2 * k * (g.y2 - g.cy)];
+function strokeArc(g, from, to, off) {
+  ctx.beginPath();
+  for (let i = 0; i <= 40; i++) {
+    const k = from + (to - from) * i / 40; let [x, y] = qpt(g, k);
+    if (off) { const [dx, dy] = qtan(g, k), n = Math.hypot(dx, dy) || 1; x += -dy / n * off; y += dx / n * off; }
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke();
 }
 
-// ------------------------------------------------------------ drawing
-const NS = 'http://www.w3.org/2000/svg';
-const el = (n, a) => { const x = document.createElementNS(NS, n); for (const k in a) x.setAttribute(k, a[k]); return x; };
-const arcPath = (y1, y2) => { const x1 = L.xs + 8, x2 = L.xt - 8, mx = (x1 + x2) / 2, bend = (y2 - y1) * 0.15 - 40;
-  return {d: `M${x1},${y1} Q${mx},${(y1 + y2) / 2 + bend} ${x2},${y2}`, x1, y1, cx: mx, cy: (y1 + y2) / 2 + bend, x2, y2}; };
-function colourOf(an) {
-  if ($('#colour').value === 'cat') { let best = null, n = -1; an.cats.forEach((v, k) => { if (v > n) { n = v; best = k; } }); return catCol(best); }
-  return PHCOL[an.max];
+// ------------------------------------------------------------------ what has happened up to the cursor
+function stats() {
+  const S = new Map(), T = new Map(), A = new Map(); let pay = new Set(), req = 0;
+  const cats = new Map(), ph = [new Set(), new Set(), new Set()];
+  for (const e of VEV) {
+    if (e.t > cur) break;
+    const s = srcKey(e), t = tgtKey(e), k = s + '\n' + t, r = PH[e.phase] ?? 0;
+    const sn = S.get(s) || S.set(s, {n: new Set()}).get(s); sn.n.add(e.u);
+    const tn = T.get(t) || T.set(t, {n: new Set()}).get(t); tn.n.add(e.u);
+    const an = A.get(k) || A.set(k, {n: new Set(), max: 0, cats: new Map()}).get(k); an.n.add(e.u); an.max = Math.max(an.max, r);
+    an.cats.set(e.cat, (an.cats.get(e.cat) || 0) + 1);
+    pay.add(e.u); req += e.n; (cats.get(e.cat) || cats.set(e.cat, new Set()).get(e.cat)).add(e.u); ph[r].add(e.u);
+  }
+  return {S, T, A, pay: pay.size, req, cats, ph, keepAll: $('#mode').value === 'cum'};
 }
-function draw() {
-  if (!L) return;
-  const M = model(), svg = $('#g');
-  svg.innerHTML = '';
-  const defs = el('defs', {});
-  defs.innerHTML = '<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
-  svg.append(defs);
-  const ga = el('g', {}), gn = el('g', {});
-  svg.append(ga, gn);
-  M.A.forEach((an, k) => {
-    const y1 = L.src.get(an.s), r = L.tgt.get(an.t); if (y1 == null || !r) return;
-    const p = arcPath(y1, r.y), w = 1 + Math.log2(1 + an.pay.size) * 1.2;
-    const recent = cur - an.last < 3 * STEP && $('#mode').value !== 'all';
-    const a = el('path', {d: p.d, class: 'arc', stroke: colourOf(an), 'stroke-width': w.toFixed(1),
-      'stroke-opacity': recent ? .95 : .38, filter: recent ? 'url(#glow)' : ''});
-    a.onclick = () => select({type: 'arc', s: an.s, t: an.t});
-    a.append(el('title', {})); a.firstChild.textContent = `${an.s} → ${an.t.replace('\t', '')}\n${an.pay.size} payloads, ${an.req} requests`;
-    ga.append(a);
-  });
-  // sources
-  L.src.forEach((y, s) => {
-    const n = M.S.get(s), g = el('g', {class: 'node' + (sel && sel.type === 'src' && sel.id === s ? ' sel' : '')});
-    const lvl = s === '(other sources)' ? 0 : ((srcInfo.get(s) || {}).level || 0);
-    const r = n ? 3 + Math.min(9, Math.log2(1 + n.pay.size) * 1.6) : 2.5;
-    g.append(el('circle', {cx: L.xs, cy: y, r, fill: n ? LVCOL[lvl] : '#26324f', filter: n ? 'url(#glow)' : '', opacity: n ? 1 : .6}));
-    const t = el('text', {x: L.xs - 12, y: y + 4, 'text-anchor': 'end', class: 'lbl'});
-    t.textContent = s === '(other sources)' ? `${D.hidden_sources} other sources` : s; if (!n) t.setAttribute('opacity', .45);
-    g.append(t); g.onclick = () => select({type: 'src', id: s}); gn.append(g);
-  });
-  // targets
-  L.tgt.forEach((r, id) => {
-    const g = el('g', {class: 'node'});
-    if (r.kind === 'sitehead') {
-      const t = el('text', {x: L.xt + 14, y: r.y + 4, class: 'lbl site'}); t.textContent = r.site; g.append(t);
-      const tg = el('text', {x: L.xt - 4, y: r.y + 4, class: 'toggle', 'text-anchor': 'middle'}); tg.textContent = '−';
-      tg.onclick = ev => { ev.stopPropagation(); expanded.delete(r.site); relayout(); }; g.append(tg);
-      g.onclick = () => select({type: 'site', id: r.site}); gn.append(g); return;
-    }
-    const n = M.T.get(id);
-    const lvl = r.kind === 'path' ? (pathLv.get(id) || 0) : ((siteInfo.get(id) || {}).level || 0);
-    const rad = n ? 3.5 + Math.min(10, Math.log2(1 + n.pay.size) * 1.8) : 2.5;
-    g.append(el('circle', {cx: L.xt, cy: r.y, r: rad, fill: n ? LVCOL[lvl] : '#26324f', filter: n ? 'url(#glow)' : '', opacity: n ? 1 : .6}));
-    const t = el('text', {x: L.xt + 14 + (r.kind === 'path' ? 14 : 0), y: r.y + 4, class: 'lbl ' + (r.kind === 'path' ? 'path' : 'site')});
-    t.textContent = r.kind === 'path' ? r.path : r.site + (r.npaths > 1 ? `  (${r.npaths} paths)` : '');
-    if (!n) t.setAttribute('opacity', .45);
-    g.append(t);
-    if (r.kind === 'site' && r.npaths > 0) {
-      const tg = el('text', {x: L.xt - 4, y: r.y + 4, class: 'toggle', 'text-anchor': 'middle', opacity: 0});
-      tg.textContent = '+';
-      g.onmouseenter = () => tg.setAttribute('opacity', 1); g.onmouseleave = () => tg.setAttribute('opacity', 0);
-      tg.onclick = ev => { ev.stopPropagation(); expanded.add(r.site); relayout(); };
-      g.ondblclick = () => { expanded.add(r.site); relayout(); };
-    }
-    g.onclick = () => select(r.kind === 'path' ? {type: 'path', site: r.site, path: r.path} : {type: 'site', id: r.site});
-    gn.append(g);
-  });
-  // HUD
-  $('#c-pay').textContent = M.pay.toLocaleString(); $('#c-req').textContent = M.req.toLocaleString();
-  $('#c-src').textContent = M.S.size.toLocaleString(); $('#c-site').textContent = new Set([...M.T.keys()].map(k => k.split('\t')[0])).size;
-  const allCats = [...new Set(EV.map(e => e.cat))];
-  $('#cats').innerHTML = allCats.map(c => `<div class="catrow${offCats.has(c) ? ' off' : ''}" data-cat="${esc(c)}"><i style="background:${catCol(c)};color:${catCol(c)}"></i>${esc(catLbl(c))}<span class="n">${(M.cats.get(c) || new Set()).size}</span></div>`).join('');
-  $('#phases').innerHTML = ['probing', 'enumeration', 'extraction / exploitation'].map((p, i) => `<div class="catrow"><i style="background:${PHCOL[i]};color:${PHCOL[i]}"></i>${p}<span class="n">${M.phaseSets[i].size}</span></div>`).join('');
-  $('#clock').textContent = $('#mode').value === 'all' ? 'whole period' : fmt(cur);
-  drawTimeline();
-}
-$('#cats').addEventListener('click', e => { const r = e.target.closest('[data-cat]'); if (!r) return;
-  offCats.has(r.dataset.cat) ? offCats.delete(r.dataset.cat) : offCats.add(r.dataset.cat); relayout(); });
+let ST = null;
 
-// ------------------------------------------------------------ projectiles (canvas)
+// ------------------------------------------------------------------ frame
 const shots = [];
-function fire(fromT, toT) {
+let lastReal = performance.now(), recording = null, statsAt = -1;
+function arcColour(a) {
+  const st = ST.A.get(a.k);
+  if ($('#colour').value === 'cat') { let best = null, n = -1; (st ? st.cats : new Map()).forEach((v, c) => { if (v > n) { n = v; best = c; } });
+    return best ? catCol(best) : catCol(a.ev[0].cat); }
+  return PHCOL[st ? st.max : (PH[a.ev[0].phase] ?? 0)];
+}
+function frame(now) {
+  const dt = Math.min(.1, (now - lastReal) / 1000); lastReal = now;
+  if (playing) {
+    const prev = cur; cur += dt * +$('#speed').value * STEP;
+    if (cur >= T1 + 3 * STEP) { cur = T1 + 3 * STEP; stopPlay(); }
+    fire(prev, cur);
+  }
+  if (cur !== statsAt) { ST = stats(); statsAt = cur; }
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const bg = ctx.createRadialGradient(W / 2, H * .45, 40, W / 2, H * .45, Math.max(W, H) * .7);
+  bg.addColorStop(0, '#0d1931'); bg.addColorStop(1, '#060a13'); ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  if (!L) return requestAnimationFrame(frame);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, -scrollY * DPR);
+  let active = 0;
+  const activeSrc = new Set(), activeTgt = new Set();
+  ARCS.forEach(a => {
+    const g = arcGeo(a); if (!g) return;
+    const on = inIv(a.iv, cur), started = a.iv.length && a.iv[0][0] <= cur, an = a.anim;
+    if (on && !an.on) { an.on = true; an.grow = playing ? 0 : 1; }
+    if (!on && an.on) { an.on = false; an.fade = 1; }
+    if (an.on) { active++; activeSrc.add(a.s); activeTgt.add(a.t); an.grow = Math.min(1, an.grow + dt / .7); }
+    else an.fade = Math.max(0, an.fade - dt / 1.6);
+    const col = arcColour(a), selA = sel && sel.type === 'arc' && sel.s === a.s && sel.t === a.t, hov = hover && hover.k === a.k;
+    if (started && (ST.keepAll || selA || hov)) { ctx.globalAlpha = selA || hov ? .9 : .2; ctx.strokeStyle = col; ctx.lineWidth = selA ? 2.5 : 1.2; strokeArc(g, 0, 1); }
+    const vis = an.on ? an.grow : an.fade;
+    if (vis > 0) {
+      const reach = an.on ? an.grow : 1, alpha = an.on ? 1 : an.fade;
+      const st = ST.A.get(a.k), w = 1.6 + Math.min(5, Math.log2(1 + (st ? st.n.size : 1)) * 1.1);
+      ctx.globalAlpha = alpha * .3; ctx.strokeStyle = col; ctx.lineWidth = w * 3.4; ctx.shadowColor = col; ctx.shadowBlur = 18; strokeArc(g, 0, reach);
+      ctx.shadowBlur = 8; ctx.globalAlpha = alpha; ctx.lineWidth = w; strokeArc(g, 0, reach);
+      ctx.setLineDash([3, 14]); ctx.lineDashOffset = -now / 28; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1.2, w * .45);
+      ctx.globalAlpha = alpha * .8; strokeArc(g, 0, reach); ctx.setLineDash([]);
+      const [hx, hy] = qpt(g, reach), [tx, ty] = qtan(g, reach), ang = Math.atan2(ty, tx), s = 6 + w;
+      ctx.globalAlpha = alpha; ctx.fillStyle = col; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.moveTo(hx + Math.cos(ang) * s * .6, hy + Math.sin(ang) * s * .6);
+      ctx.lineTo(hx + Math.cos(ang + 2.5) * s, hy + Math.sin(ang + 2.5) * s); ctx.lineTo(hx + Math.cos(ang - 2.5) * s, hy + Math.sin(ang - 2.5) * s); ctx.fill();
+      if (an.on && an.grow >= 1) { const ph = (now / 1100 + a.k.length * .37) % 1; ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+        ctx.globalAlpha = (1 - ph) * .7; ctx.beginPath(); ctx.arc(g.x2, g.y2, 6 + ph * 22, 0, 7); ctx.stroke(); }
+      ctx.shadowBlur = 0;
+    }
+    // data requested back: packets flowing from the target to the source, beside the arc
+    const leakOn = inIv(a.leak, cur);
+    if (!leakOn && an.leakOn) an.leakFade = 1;
+    an.leakOn = leakOn;
+    if (!leakOn) an.leakFade = Math.max(0, an.leakFade - dt / 1.6);
+    const la = leakOn ? Math.min(1, an.grow * 1.2) : an.leakFade;
+    if (la > 0) {
+      ctx.globalAlpha = la * .3; ctx.strokeStyle = LEAK; ctx.lineWidth = 7; ctx.shadowColor = LEAK; ctx.shadowBlur = 16; strokeArc(g, 0, 1, 9); ctx.shadowBlur = 0;
+      for (let i = 0; i < 10; i++) {
+        const k = 1 - (((now / 1600) + i / 10) % 1);
+        let [px, py] = qpt(g, k); const [dx, dy] = qtan(g, k), n = Math.hypot(dx, dy) || 1; px += -dy / n * 9; py += dx / n * 9;
+        const sz = 2.2 + 1.6 * Math.sin((k + i) * 7) ** 2;
+        ctx.globalAlpha = la * (.55 + .45 * Math.sin(k * Math.PI)); ctx.fillStyle = LEAK; ctx.shadowColor = LEAK; ctx.shadowBlur = 10;
+        ctx.fillRect(px - sz, py - sz, sz * 2, sz * 2); ctx.shadowBlur = 0;
+      }
+    }
+    ctx.globalAlpha = 1;
+  });
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const s = shots[i], k = (now - s.t0) / 800; if (k < 0) continue; if (k > 1.5) { shots.splice(i, 1); continue; }
+    const g = s.g;
+    if (k <= 1) {
+      const [x, y] = qpt(g, k), [tx, ty] = qpt(g, Math.max(0, k - .12));
+      const gr = ctx.createLinearGradient(tx, ty, x, y); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, s.c);
+      ctx.strokeStyle = gr; ctx.lineWidth = 3; strokeArc(g, Math.max(0, k - .12), k);
+      ctx.fillStyle = '#fff'; ctx.shadowColor = s.c; ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    } else { const r = (k - 1) * 50; ctx.strokeStyle = s.c; ctx.globalAlpha = Math.max(0, 1 - (k - 1) / .5); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(g.x2, g.y2, r, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }
+  }
+  ctx.textBaseline = 'middle';
+  L.src.forEach((y, s) => {
+    const st = ST.S.get(s), lvl = s === OTHER ? 0 : ((srcInfo.get(s) || {}).level || 0);
+    const r = st ? 3.5 + Math.min(8, Math.log2(1 + st.n.size) * 1.5) : 2.5;
+    node(L.xs, y, r, st ? LVCOL[lvl] : '#26324f', activeSrc.has(s), now);
+    ctx.textAlign = 'right'; ctx.font = '12px Consolas, monospace';
+    ctx.fillStyle = sel && sel.type === 'src' && sel.id === s ? '#fff' : (st ? '#b8c6e3' : '#4b587a');
+    ctx.fillText(L.lab(s), L.xs - r - 8, y);
+  });
+  L.tgt.forEach((r, id) => {
+    ctx.textAlign = 'left';
+    if (r.kind === 'head') { ctx.font = '600 12px Consolas, monospace'; ctx.fillStyle = '#e6eeff'; ctx.fillText(r.site, L.xt + 16, r.y);
+      ctx.fillStyle = '#38bdf8'; ctx.font = '700 14px Consolas, monospace'; ctx.textAlign = 'center'; ctx.fillText('−', L.xt, r.y); return; }
+    const st = ST.T.get(id), lvl = r.kind === 'path' ? (pathLv.get(id) || 0) : ((siteInfo.get(id) || {}).level || 0);
+    const rad = st ? 4 + Math.min(9, Math.log2(1 + st.n.size) * 1.7) : 2.5;
+    node(L.xt, r.y, rad, st ? LVCOL[lvl] : '#26324f', activeTgt.has(id), now);
+    ctx.textAlign = 'left'; ctx.font = (r.kind === 'site' ? '600 ' : '') + '12px Consolas, monospace';
+    ctx.fillStyle = st ? (r.kind === 'site' ? '#e6eeff' : '#9fb1d6') : '#4b587a';
+    ctx.fillText(r.kind === 'path' ? r.path : r.site + (r.npaths > 1 ? `  (${r.npaths} paths)` : ''), L.xt + rad + 9 + (r.kind === 'path' ? 8 : 0), r.y);
+    if (r.kind === 'site' && hover && hover.type === 'site' && hover.id === id && r.npaths > 0) {
+      ctx.fillStyle = '#38bdf8'; ctx.font = '700 14px Consolas, monospace'; ctx.textAlign = 'center'; ctx.fillText('+', L.xt - rad - 10, r.y); }
+  });
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (recording) {          // in the video: title, clock and counters
+    ctx.fillStyle = 'rgba(6,10,19,.8)'; ctx.fillRect(0, 0, W, 34); ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left'; ctx.fillStyle = '#38bdf8'; ctx.font = '600 14px Segoe UI, sans-serif'; ctx.fillText('● ' + D.title, 14, 17);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = '600 14px Consolas, monospace';
+    ctx.fillText(`${fmt(Math.min(cur, T1))}   payloads ${ST.pay}   requests ${ST.req}   attacks in progress ${active}`, W - 14, 17);
+  }
+  $('#c-pay').textContent = ST.pay.toLocaleString(); $('#c-req').textContent = ST.req.toLocaleString();
+  $('#c-src').textContent = ST.S.size.toLocaleString(); $('#c-act').textContent = active;
+  $('#clock').textContent = fmt(Math.max(T0, Math.min(cur, T1)));
+  if (now - (frame.tl || 0) > 250) { frame.tl = now; sideStats(); drawCursor(); }
+  requestAnimationFrame(frame);
+}
+function node(x, y, r, col, on, now) {
+  ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = on ? 18 : 8;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+  if (on) { const p = (now / 900) % 1; ctx.strokeStyle = col; ctx.globalAlpha = (1 - p) * .8; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, r + 3 + p * 10, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }
+}
+function fire(a, b) {
   let n = 0;
-  for (const e of EV) {
-    if (e.t <= fromT) continue; if (e.t > toT) break;
-    if (!visible(e)) continue;
-    const y1 = L.src.get(srcKey(e)), r = L.tgt.get(tgtKey(e)); if (y1 == null || !r) continue;
-    shots.push({p: arcPath(y1, r.y), c: catCol(e.cat), t0: performance.now() + Math.random() * 250, big: (PH[e.phase] ?? 0) === 2});
-    feed(e);
-    if (++n > 160) break;
+  for (const e of VEV) {
+    if (e.t <= a) continue; if (e.t > b) break;
+    const arc = ARCS.get(srcKey(e) + '\n' + tgtKey(e)), g = arc && arcGeo(arc); if (!g) continue;
+    shots.push({g, c: catCol(e.cat), t0: performance.now() + Math.random() * 200});
+    feed(e); if (++n > 120) break;
   }
 }
 function feed(e) {
-  const u = units.get(e.u) || {};
-  const d = document.createElement('div');
-  d.innerHTML = `<span class="t">${fmt(e.t).slice(11, 16)}</span> <span style="color:${catCol(e.cat)}">■</span> ${esc(e.src)} → ${esc(e.site)}${esc(e.path || '')} <span class="muted">${esc(catLbl(e.cat))} · ${esc(e.phase)}${u.param ? ' · ' + esc(u.param) : ''}</span>`;
-  d.title = u.value || '';
-  const f = $('#feed'); f.prepend(d); while (f.children.length > 60) f.lastChild.remove();
+  const u = units.get(e.u) || {}, d = document.createElement('div');
+  d.innerHTML = `<span class="t">${fmt(e.t).slice(5, 16)}</span> <span style="color:${catCol(e.cat)}">■</span> ${esc(e.src)} → ${esc(e.site)}${esc(e.path || '')} <span class="muted">${esc(catLbl(e.cat))} · ${esc(e.phase)}${u.param ? ' · ' + esc(u.param) : ''}</span>`;
+  d.title = u.value || ''; const f = $('#feed'); f.prepend(d); while (f.children.length > 60) f.lastChild.remove();
 }
-function anim(now) {
-  const cv = $('#fx'), c = cv.getContext('2d'), dpr = devicePixelRatio;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
-  for (let i = shots.length - 1; i >= 0; i--) {
-    const s = shots[i], k = (now - s.t0) / 900;
-    if (k < 0) continue;
-    if (k > 1.6) { shots.splice(i, 1); continue; }
-    const p = s.p;
-    if (k <= 1) {
-      const q = 1 - k, x = q * q * p.x1 + 2 * q * k * p.cx + k * k * p.x2, y = q * q * p.y1 + 2 * q * k * p.cy + k * k * p.y2;
-      const k2 = Math.max(0, k - .08), q2 = 1 - k2;
-      const tx = q2 * q2 * p.x1 + 2 * q2 * k2 * p.cx + k2 * k2 * p.x2, ty = q2 * q2 * p.y1 + 2 * q2 * k2 * p.cy + k2 * k2 * p.y2;
-      const gr = c.createLinearGradient(tx, ty, x, y); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, s.c);
-      c.strokeStyle = gr; c.lineWidth = s.big ? 3 : 2; c.beginPath(); c.moveTo(tx, ty); c.lineTo(x, y); c.stroke();
-      c.fillStyle = '#fff'; c.shadowColor = s.c; c.shadowBlur = 12; c.beginPath(); c.arc(x, y, s.big ? 2.8 : 2, 0, 7); c.fill(); c.shadowBlur = 0;
-    } else {
-      const r = (k - 1) * (s.big ? 40 : 26), a = 1 - (k - 1) / .6;
-      c.strokeStyle = s.c; c.globalAlpha = Math.max(0, a); c.lineWidth = 2;
-      c.beginPath(); c.arc(p.x2, p.y2, r, 0, 7); c.stroke(); c.globalAlpha = 1;
-    }
-  }
-  requestAnimationFrame(anim);
+function sideStats() {
+  const cats = [...new Set(EV.map(e => e.cat))];
+  const hc = cats.map(c => `<div class="catrow${offCats.has(c) ? ' off' : ''}" data-cat="${esc(c)}"><i style="background:${catCol(c)};color:${catCol(c)}"></i>${esc(catLbl(c))}<span class="n">${(ST.cats.get(c) || new Set()).size}</span></div>`).join('');
+  if ($('#cats')._h !== hc) { $('#cats').innerHTML = hc; $('#cats')._h = hc; }
+  const hp = ['probing', 'enumeration', 'extraction / exploitation'].map((p, i) => `<div class="catrow"><i style="background:${PHCOL[i]};color:${PHCOL[i]}"></i>${p}<span class="n">${ST.ph[i].size}</span></div>`).join('');
+  if ($('#phases')._h !== hp) { $('#phases').innerHTML = hp; $('#phases')._h = hp; }
 }
-requestAnimationFrame(anim);
+$('#cats').addEventListener('click', e => { const r = e.target.closest('[data-cat]'); if (!r) return;
+  offCats.has(r.dataset.cat) ? offCats.delete(r.dataset.cat) : offCats.add(r.dataset.cat); rebuild(); });
 
-// ------------------------------------------------------------ timeline
+// ------------------------------------------------------------------ timeline
 let TL = null;
 function drawTimeline() {
-  const svg = $('#tls'), W = svg.clientWidth || innerWidth, H = 128, padL = 50, padR = 20, top = 12, bot = 24;
-  const bin = Math.max(STEP, 3600), b0 = Math.floor(T0 / bin) * bin, nb = Math.max(1, Math.floor((T1 - b0) / bin) + 1);
-  const cats = [...new Set(EV.map(e => e.cat))];
-  const stacks = Array.from({length: nb}, () => new Map());
-  for (const e of EV) { if (!visible(e)) continue; const i = Math.floor((e.t - b0) / bin); const m = stacks[i]; m.set(e.cat, (m.get(e.cat) || new Set()).add(e.u)); }
+  const svg = $('#tls'), Wt = svg.clientWidth || innerWidth, Ht = 116, padL = 46, padR = 16, top = 10, bot = 22;
+  const bin = Math.max(3600, STEP), b0 = Math.floor(T0 / bin) * bin, nb = Math.max(1, Math.floor((T1 - b0) / bin) + 1);
+  const cats = [...new Set(EV.map(e => e.cat))], stacks = Array.from({length: nb}, () => new Map());
+  for (const e of VEV) { const m = stacks[Math.floor((e.t - b0) / bin)]; (m.get(e.cat) || m.set(e.cat, new Set()).get(e.cat)).add(e.u); }
   const tot = stacks.map(m => [...m.values()].reduce((a, s) => a + s.size, 0)), mx = Math.max(1, ...tot);
-  const x = t => padL + (t - b0) / (nb * bin) * (W - padL - padR), bw = Math.max(1, (W - padL - padR) / nb - 1);
+  const x = t => padL + (t - b0) / (nb * bin) * (Wt - padL - padR), bw = Math.max(1, (Wt - padL - padR) / nb - .5);
   let h = '';
-  stacks.forEach((m, i) => { let y = H - bot; cats.forEach(c => { const n = (m.get(c) || new Set()).size; if (!n) return;
-    const hh = n / mx * (H - top - bot); y -= hh; h += `<rect x="${x(b0 + i * bin).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" fill="${catCol(c)}" opacity=".85"/>`; }); });
+  stacks.forEach((m, i) => { let y = Ht - bot; cats.forEach(c => { const n = (m.get(c) || new Set()).size; if (!n) return;
+    const hh = n / mx * (Ht - top - bot); y -= hh; h += `<rect x="${x(b0 + i * bin).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" fill="${catCol(c)}" opacity=".85"/>`; }); });
   const days = Math.ceil(nb * bin / 86400), every = Math.max(1, Math.ceil(days / 12));
   for (let d = Math.ceil(b0 / 86400) * 86400; d <= b0 + nb * bin; d += 86400 * every)
-    h += `<line x1="${x(d)}" x2="${x(d)}" y1="${top}" y2="${H - bot}" stroke="#1c2742"/><text x="${x(d) + 3}" y="${H - 8}" fill="#7f8db0" font-size="11">${fmt(d).slice(5, 10)}</text>`;
-  h += `<text x="6" y="${top + 10}" fill="#7f8db0" font-size="11">${mx}</text><text x="6" y="${H - bot}" fill="#7f8db0" font-size="11">0</text>`;
-  h += `<text x="6" y="${H - 8}" fill="#7f8db0" font-size="10">payloads/${bin >= 86400 ? 'day' : 'h'}</text>`;
-  const cx = x(cur);
-  h += `<line x1="${cx}" x2="${cx}" y1="4" y2="${H - bot + 4}" stroke="#38bdf8" stroke-width="2"/><circle cx="${cx}" cy="6" r="4" fill="#38bdf8"/>`;
-  svg.innerHTML = h;
-  TL = {x0: padL, x1: W - padR, b0, span: nb * bin};
+    h += `<line x1="${x(d)}" x2="${x(d)}" y1="${top}" y2="${Ht - bot}" stroke="#1c2742"/><text x="${x(d) + 3}" y="${Ht - 7}" fill="#7f8db0" font-size="11">${fmt(d).slice(5, 10)}</text>`;
+  h += `<text x="5" y="${top + 9}" fill="#7f8db0" font-size="11">${mx}</text><text x="5" y="${Ht - 7}" fill="#7f8db0" font-size="10">payloads/${bin >= 86400 ? 'day' : 'h'}</text>`;
+  h += `<g id="cursor"><line x1="0" x2="0" y1="3" y2="${Ht - bot + 3}" stroke="#38bdf8" stroke-width="2"/><circle cx="0" cy="5" r="4" fill="#38bdf8"/></g>`;
+  svg.innerHTML = h; TL = {x0: padL, x1: Wt - padR, b0, span: nb * bin}; drawCursor();
 }
-function seekFromEvent(ev) {
-  if (!TL) return;
-  const r = $('#tls').getBoundingClientRect(), f = Math.min(1, Math.max(0, (ev.clientX - r.left - TL.x0) / (TL.x1 - TL.x0)));
-  cur = Math.floor((TL.b0 + f * TL.span) / STEP) * STEP; if ($('#mode').value === 'all') $('#mode').value = 'cum'; draw();
-}
+function drawCursor() { if (!TL) return; const c = $('#cursor'); if (!c) return;
+  const f = Math.min(1, Math.max(0, (cur - TL.b0) / TL.span)); c.setAttribute('transform', `translate(${(TL.x0 + f * (TL.x1 - TL.x0)).toFixed(1)},0)`); }
+function seek(ev) { const r = $('#tls').getBoundingClientRect(), f = Math.min(1, Math.max(0, (ev.clientX - r.left - TL.x0) / (TL.x1 - TL.x0)));
+  cur = TL.b0 + f * TL.span; }
 let drag = false;
-$('#tls').addEventListener('mousedown', e => { drag = true; stop(); seekFromEvent(e); });
-addEventListener('mousemove', e => { if (drag) seekFromEvent(e); });
-addEventListener('mouseup', () => { drag = false; });
+$('#tls').addEventListener('mousedown', e => { drag = true; stopPlay(); seek(e); });
+addEventListener('mousemove', e => { if (drag) seek(e); }); addEventListener('mouseup', () => { drag = false; });
 
-// ------------------------------------------------------------ playback
-const steps = () => { const s = new Set(); for (const e of EV) if (visible(e)) s.add(Math.floor(e.t / STEP) * STEP); return [...s].sort((a, b) => a - b); };
-function next(dir) {
-  const S = steps(); if (!S.length) return null;
-  if (dir > 0) return S.find(t => t > cur) ?? null;
-  for (let i = S.length - 1; i >= 0; i--) if (S[i] < cur) return S[i]; return null;
+// ------------------------------------------------------------------ playback, recording
+function startPlay(fromStart) {
+  if (fromStart || cur >= T1) { cur = T0 - STEP; $('#feed').innerHTML = ''; ARCS.forEach(a => { a.anim = {on: false, grow: 0, fade: 0, leakOn: false, leakFade: 0}; }); }
+  playing = true; $('#play').textContent = '❚❚ Pause';
 }
-function advance() {
-  const n = next(1);
-  if (n == null) { stop(); return; }
-  const prev = cur; cur = n; fire(prev + STEP - 1, cur + STEP - 1); draw();
-}
-function stop() { clearInterval(timer); timer = null; $('#play').textContent = '▶ Play'; }
-$('#play').onclick = () => {
-  if (timer) return stop();
-  if ($('#mode').value === 'all') $('#mode').value = 'cum';
-  if (cur >= Math.floor(T1 / STEP) * STEP) { cur = Math.floor(T0 / STEP) * STEP - STEP; $('#feed').innerHTML = ''; }
-  $('#play').textContent = '❚❚ Pause';
-  timer = setInterval(advance, 1000 / +$('#speed').value);
+function stopPlay() { playing = false; $('#play').textContent = '▶ Play'; if (recording) stopRec(); }
+$('#play').onclick = () => playing ? stopPlay() : startPlay(false);
+const nextT = dir => { const ts = VEV.map(e => e.t); if (dir > 0) return ts.find(t => t > cur + 1); for (let i = ts.length - 1; i >= 0; i--) if (ts[i] < cur - 1) return ts[i]; };
+$('#fwd').onclick = () => { stopPlay(); const t = nextT(1); if (t != null) { fire(cur, t); cur = t; } };
+$('#back').onclick = () => { stopPlay(); const t = nextT(-1); if (t != null) cur = t; };
+$('#step').onchange = () => { STEP = +$('#step').value; rebuild(); };
+$('#minlv').onchange = rebuild;
+let qt; $('#q').oninput = () => { clearTimeout(qt); qt = setTimeout(rebuild, 200); };
+$('#gsites').onclick = () => { expanded.clear(); $('#gsites').classList.add('on'); $('#gpaths').classList.remove('on'); rebuild(); };
+$('#gpaths').onclick = () => { D.sites.forEach(s => expanded.add(s.id)); $('#gpaths').classList.add('on'); $('#gsites').classList.remove('on'); rebuild(); };
+function rebuild() { buildArcs(); layout(); drawTimeline(); statsAt = -1; if (sel) select(sel); }
+addEventListener('resize', () => { layout(); drawTimeline(); });
+document.querySelectorAll('[data-hide]').forEach(b => b.onclick = () => { $('#' + b.dataset.hide).style.display = 'none';
+  $(b.dataset.hide === 'hud' ? '#showhud' : '#showfeed').style.display = 'block'; layout(); });
+$('#showhud').onclick = () => { $('#hud').style.display = ''; $('#showhud').style.display = 'none'; layout(); };
+$('#showfeed').onclick = () => { $('#feedbox').style.display = 'flex'; $('#showfeed').style.display = 'none'; layout(); };
+let rec = null, chunks = [];
+function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); }
+$('#recb').onclick = () => {
+  if (recording) { stopPlay(); return; }
+  if (!cv.captureStream || !window.MediaRecorder) { alert('This browser cannot record the canvas.'); return; }
+  const types = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const type = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  chunks = []; rec = new MediaRecorder(cv.captureStream(30), type ? {mimeType: type, videoBitsPerSecond: 6e6} : {});
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = () => { recording = null; $('#recb').classList.remove('on'); $('#recb').textContent = '● Record video';
+    const blob = new Blob(chunks, {type: rec.mimeType || 'video/webm'}), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = (D.title || 'attack-map').replace(/[^\w.-]+/g, '_') + (blob.type.includes('mp4') ? '.mp4' : '.webm');
+    document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); };
+  recording = true; rec.start(500); $('#recb').classList.add('on'); $('#recb').textContent = '■ Stop recording';
+  startPlay(true);
 };
-$('#speed').onchange = () => { if (timer) { stop(); $('#play').click(); } };
-$('#fwd').onclick = () => { stop(); if ($('#mode').value === 'all') $('#mode').value = 'cum'; advance(); };
-$('#back').onclick = () => { stop(); const p = next(-1); if (p != null) { cur = p; draw(); } };
-$('#step').onchange = () => { STEP = +$('#step').value; cur = Math.floor(cur / STEP) * STEP; draw(); };
-['#mode', '#colour'].forEach(s => $(s).onchange = draw);
-['#minlv'].forEach(s => $(s).onchange = relayout);
-let qt; $('#q').oninput = () => { clearTimeout(qt); qt = setTimeout(relayout, 200); };
-$('#gsites').onclick = () => { expanded.clear(); $('#gsites').classList.add('on'); $('#gpaths').classList.remove('on'); relayout(); };
-$('#gpaths').onclick = () => { D.sites.forEach(s => expanded.add(s.id)); $('#gpaths').classList.add('on'); $('#gsites').classList.remove('on'); relayout(); };
-function relayout() { layout(); draw(); if (sel) select(sel, true); }
-addEventListener('resize', () => relayout());
 
-// ------------------------------------------------------------ details
-function select(s, keep) {
+// ------------------------------------------------------------------ hit testing, hover, details
+function hit(mx, my) {
+  my += scrollY;
+  let best = null, bd = 10;
+  L.src.forEach((y, s) => { if (Math.abs(my - y) < 9 && mx > L.xs - 220 && mx < L.xs + 10) { const d = Math.abs(my - y); if (d < bd) { bd = d; best = {type: 'src', id: s}; } } });
+  L.tgt.forEach((r, id) => { if (Math.abs(my - r.y) < 10 && mx > L.xt - 24 && mx < L.xt + 320)
+    best = r.kind === 'head' ? {type: 'head', site: r.site} : r.kind === 'path' ? {type: 'path', site: r.site, path: r.path, id} : {type: 'site', id: r.site, plus: mx < L.xt - 8}; });
+  if (best) return best;
+  let ba = null, bad = 7;
+  ARCS.forEach(a => { if (!ST || !ST.A.get(a.k)) return; const g = arcGeo(a); if (!g) return;
+    for (let i = 0; i <= 30; i++) { const [x, y] = qpt(g, i / 30), d = Math.hypot(mx - x, my - y); if (d < bad) { bad = d; ba = {type: 'arc', s: a.s, t: a.t, k: a.k}; } } });
+  return ba;
+}
+cv.addEventListener('mousemove', e => {
+  const r = cv.getBoundingClientRect(), h = hit(e.clientX - r.left, e.clientY - r.top);
+  hover = h; cv.style.cursor = h ? 'pointer' : 'default';
+  const tip = $('#tip');
+  if (h && h.type === 'arc') { const st = ST.A.get(h.k); tip.style.display = 'block'; tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 10) + 'px';
+    tip.textContent = `${h.s} → ${h.t.replace('\t', '')}  ·  ${st ? st.n.size : 0} payloads so far`; }
+  else tip.style.display = 'none';
+});
+cv.addEventListener('mouseleave', () => { hover = null; $('#tip').style.display = 'none'; });
+cv.addEventListener('click', e => {
+  const r = cv.getBoundingClientRect(), h = hit(e.clientX - r.left, e.clientY - r.top); if (!h) return;
+  if (h.type === 'head') { expanded.delete(h.site); rebuild(); return; }
+  if (h.type === 'site' && h.plus) { expanded.add(h.id); rebuild(); return; }
+  select(h);
+});
+cv.addEventListener('dblclick', e => { const r = cv.getBoundingClientRect(), h = hit(e.clientX - r.left, e.clientY - r.top);
+  if (h && h.type === 'site') { expanded.add(h.id); rebuild(); } });
+function select(s) {
   sel = s;
-  const evs = EV.filter(e => {
-    if (s.type === 'src') return srcKey(e) === s.id;
-    if (s.type === 'site') return e.site === s.id;
-    if (s.type === 'path') return e.site === s.site && e.path === s.path;
-    if (s.type === 'arc') return srcKey(e) === s.s && tgtKey(e) === s.t;
-  });
+  const evs = EV.filter(e => s.type === 'src' ? srcKey(e) === s.id : s.type === 'site' ? e.site === s.id :
+    s.type === 'path' ? e.site === s.site && e.path === s.path : srcKey(e) === s.s && tgtKey(e) === s.t);
   let title, kind, lvl, reasons = [];
-  if (s.type === 'src') { title = s.id === '(other sources)' ? `${D.hidden_sources} other sources` : s.id; kind = 'Source';
-    lvl = (srcInfo.get(s.id) || {}).level || 0; }
+  if (s.type === 'src') { title = s.id === OTHER ? `${D.hidden_sources} other sources` : s.id; kind = 'Source'; lvl = (srcInfo.get(s.id) || {}).level || 0; }
   else if (s.type === 'site') { title = s.id; kind = 'Site'; lvl = (siteInfo.get(s.id) || {}).level || 0; }
   else if (s.type === 'path') { title = s.site + s.path; kind = 'Path'; lvl = pathLv.get(s.site + '\t' + s.path) || 0; }
-  else {
-    const [site, path] = s.t.split('\t'); title = `${s.s} → ${site}${path || ''}`; kind = 'Source → target';
-    const p = path != null ? pathPairLv.get(s.s + '\t' + site + '\t' + path) : pairLv.get(s.s + '\t' + site);
-    lvl = p ? p.level : 0; reasons = p ? p.reasons : [];
-  }
+  else { const [site, path] = s.t.split('\t'); title = `${s.s} → ${site}${path || ''}`; kind = 'Source → target';
+    const p = path != null ? pathPairLv.get(s.s + '\t' + site + '\t' + path) : pairLv.get(s.s + '\t' + site); lvl = p ? p.level : 0; reasons = p ? p.reasons : []; }
   const us = new Map(); let req = 0; const st = new Set(), ph = {}, cats = new Map(), srcs = new Set(), tg = new Set();
   evs.forEach(e => { const u = units.get(e.u) || {}; if (!us.has(e.u)) us.set(e.u, {u, t: e.t, srcs: new Set(), tg: new Set(), n: 0});
     const x = us.get(e.u); x.srcs.add(e.src); x.tg.add(e.site + (e.path || '')); x.n += e.n; x.t = Math.min(x.t, e.t);
     req += e.n; (u.statuses || []).forEach(v => st.add(v)); ph[e.phase] = Math.min(ph[e.phase] ?? Infinity, e.t);
     cats.set(e.cat, (cats.get(e.cat) || 0) + 1); srcs.add(e.src); tg.add(e.site + (e.path || '')); });
-  // injection points of this selection
   const pts = new Map();
-  us.forEach(x => { const u = x.u; const k = `${u.site}${u.path} ? ${u.param || '-'}`; const p = pts.get(k) || pts.set(k, []).get(k); p.push(x); });
+  us.forEach(x => { const u = x.u, k = `${u.site}${u.path} ? ${u.param || '-'}`; (pts.get(k) || pts.set(k, []).get(k)).push(x); });
   let h = `<h2>${esc(title)}</h2><div class="muted">${kind}</div>
     <dl><dt>Level</dt><dd><span class="lv lv${lvl}">${esc(LVN[lvl])}</span></dd>
     ${reasons.length ? `<dt>Why</dt><dd>${reasons.map(esc).join('<br>')}</dd>` : ''}
     <dt>Payloads</dt><dd>${us.size} distinct, ${req.toLocaleString()} requests</dd>
     <dt>Active</dt><dd>${evs.length ? fmt(evs[0].t) + ' → ' + fmt(evs[evs.length - 1].t) : '-'}</dd>
-    ${s.type !== 'src' && s.type !== 'arc' ? `<dt>Sources</dt><dd>${srcs.size}</dd>` : ''}
-    ${s.type === 'src' ? `<dt>Targets</dt><dd>${tg.size}</dd>` : ''}
+    ${s.type !== 'src' && s.type !== 'arc' ? `<dt>Sources</dt><dd>${srcs.size}</dd>` : ''}${s.type === 'src' ? `<dt>Targets</dt><dd>${tg.size}</dd>` : ''}
     <dt>Phases first seen</dt><dd>${Object.entries(ph).sort((a, b) => a[1] - b[1]).map(([p, t]) => `<span class="ph" style="background:${PHCOL[PH[p] ?? 0]}"></span>${esc(p)} ${fmt(t).slice(5)}`).join('<br>') || '-'}</dd>
     <dt>Statuses</dt><dd>${[...st].sort().join(', ') || '-'}</dd>
-    <dt>Attack types</dt><dd>${[...cats.entries()].sort((a, b) => b[1] - a[1]).map(([c, n]) => `<span style="color:${catCol(c)}">■</span> ${esc(catLbl(c))}`).join('<br>')}</dd></dl>`;
-  if (!D.sanitized && pts.size) {
+    <dt>Attack types</dt><dd>${[...cats.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => `<span style="color:${catCol(c)}">■</span> ${esc(catLbl(c))}`).join('<br>')}</dd></dl>`;
+  if (!D.sanitized && pts.size)
     h += `<h3>Injection points</h3><table class="p"><tr><th>Point</th><th>Payloads</th><th>Phases in order</th><th>Complexity</th></tr>` +
       [...pts.entries()].sort((a, b) => b[1].length - a[1].length).map(([k, xs]) => { const P = D.points[k] || {};
         return `<tr><td class="v">${esc(k)}</td><td>${xs.length}</td><td>${P.in_order ? 'yes' : 'no'}</td><td>${P.trend == null ? (xs.length < D.series_min ? `< ${D.series_min} payloads` : '-') : (P.trend > 0 ? 'rising' : 'not rising') + ' (' + P.trend + ')'}</td></tr>`; }).join('') + '</table>';
-  }
   h += `<h3>Payloads, in order</h3><table class="p"><tr><th>First seen</th><th>Phase</th><th>Payload</th></tr>` +
     [...us.values()].sort((a, b) => a.t - b.t).slice(0, 300).map(x => `<tr><td class="muted" style="white-space:nowrap">${fmt(x.t).slice(5)}<br>${x.n} req · ${esc((x.u.statuses || []).join(','))}</td>
       <td><span class="ph" style="background:${PHCOL[PH[x.u.phase] ?? 0]}"></span>${esc(x.u.phase)}<br><span style="color:${catCol(x.u.cat)}">${esc(catLbl(x.u.cat))}</span></td>
       <td>${D.sanitized ? '' : `<div class="v">${esc(x.u.value)}</div><div class="muted">${esc([...x.tg][0])}${x.u.param ? ' ? ' + esc(x.u.param) : ''} · ${esc([...x.srcs].join(', '))}</div>`}</td></tr>`).join('') + '</table>';
   if (us.size > 300) h += `<div class="muted">first 300 of ${us.size} shown</div>`;
   h += `<div class="muted" style="margin-top:10px">Levels describe what the payloads show; they don't establish that an attack succeeded.</div>`;
-  $('#detc').innerHTML = h; $('#det').style.display = 'block'; $('#feedbox').style.display = 'none';
-  if (!keep) draw();
+  $('#detc').innerHTML = h; $('#det').style.display = 'block'; $('#feedbox').style.visibility = 'hidden'; layout();
 }
-$('#detx').onclick = () => { sel = null; $('#det').style.display = 'none'; $('#feedbox').style.display = 'flex'; draw(); };
+$('#detx').onclick = () => { sel = null; $('#det').style.display = 'none'; $('#feedbox').style.visibility = ''; layout(); };
 $('#aboutb').onclick = () => { const a = $('#about'); a.style.display = a.style.display === 'block' ? 'none' : 'block'; };
 $('#about').innerHTML = '<h3 style="margin-top:0">Levels</h3>' + D.levels.map((l, i) => `<p><span class="lv lv${i}">${esc(l.name)}</span> ${esc(l.rule)}</p>`).join('') +
-  `<p class="muted">Levels are computed per source + site and per source + path, from Payload Analyzer's categories and phases. Each distinct payload counts once, at its first-seen time; identical repeats only add to the request count. They describe what the payloads show, not whether an attack succeeded.</p>
-   <p class="muted">Sites: click to see details, double-click (or the + sign) to expand into paths; "paths" in the top bar expands all.</p>`;
+  `<p class="muted">Computed per source + site and per source + path from Payload Analyzer's categories and phases. Each distinct payload counts once at its first-seen time; an attack is drawn as in progress from a payload's first to its last time seen. Packets flowing back mark active extraction payloads: data was requested back, which does not establish that it was returned.</p>
+   <p class="muted">Sites: click for details, double-click or + to expand into paths; "paths" expands all. Scroll the map when it is taller than the window.</p>`;
 
-layout(); cur = Math.floor(T1 / STEP) * STEP; $('#mode').value = 'all'; draw();
+if (!EV.length) document.body.insertAdjacentHTML('beforeend', '<div style="position:absolute;top:45%;width:100%;text-align:center;color:#7f8db0">No attack payloads in this analysis.</div>');
+buildArcs(); layout(); drawTimeline();
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>
