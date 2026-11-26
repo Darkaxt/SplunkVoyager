@@ -23,6 +23,8 @@ DEFAULTS = {
     "default_instance": "",
     "voyager_url": "http://localhost:8080",
     "max_jobs": 2,              # Splunk searches per module running at once
+    "auto_update": "apply",     # apply: install new versions from GitHub and restart | check: only show them | off
+    "update_interval": 30,      # minutes between checks
 }
 INSTANCE_DEFAULTS = {"name": "", "base": "", "locale": "en-US", "app": ""}
 _current = contextvars.ContextVar("voyager_splunk_instance", default=None)
@@ -105,6 +107,12 @@ def save(values):
         s["voyager_url"] = str(values["voyager_url"]).strip() or DEFAULTS["voyager_url"]
     if "max_jobs" in values:
         s["max_jobs"] = max(1, min(10, int(values["max_jobs"])))
+    if "auto_update" in values:
+        if values["auto_update"] not in ("apply", "check", "off"):
+            raise ValueError("auto_update must be apply, check or off")
+        s["auto_update"] = values["auto_update"]
+    if "update_interval" in values:
+        s["update_interval"] = max(5, min(1440, int(values["update_interval"])))
     names = [i["name"] for i in s["instances"]]
     if s["default_instance"] not in names:
         s["default_instance"] = names[0] if names else ""

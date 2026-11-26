@@ -88,6 +88,36 @@ def api_settings():
         return _err(e)
 
 
+@workbench_bp.route("/api/update", methods=["GET"])
+def api_update_status():
+    import updater
+    s = voyager_settings.load()
+    return jsonify({**updater.status, "mode": s.get("auto_update"), "interval": s.get("update_interval"),
+                    "supervised": os.environ.get("VOYAGER_CHILD") == "1", "checkout": updater.is_checkout()})
+
+
+@workbench_bp.route("/api/update/<action>", methods=["POST"])
+def api_update_action(action):
+    import threading
+    import updater
+    _json()
+    if action == "check":
+        updater.check()
+        return api_update_status()
+    if action == "apply":
+        if os.environ.get("VOYAGER_CHILD") != "1":
+            return _err("Voyager was started with --no-supervisor: update with git pull and restart it yourself")
+        if not updater.check() or updater.status["blocked"]:
+            return _err(updater.status["blocked"] or updater.status["error"] or "already up to date")
+
+        def go():
+            if updater.apply(logger.info) and getattr(updater, "restart_hook", None):
+                updater.restart_hook()
+        threading.Thread(target=go, daemon=True).start()
+        return jsonify({"status": "updating"})
+    abort(404)
+
+
 @workbench_bp.route("/api/inv", methods=["GET", "POST"])
 def api_investigations():
     if request.method == "GET":

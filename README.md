@@ -46,6 +46,11 @@ shows a terminal dashboard (`python run.py --help` for options). Then:
 4. Open **Investigations**, create one with a time range (and, with several instances, the Splunk to search),
    and start the analyses. On the **Query** page, the session of your default instance is preselected.
 
+**Updates.** `run.py` checks GitHub when it starts and every 30 minutes, installs new versions with a
+fast-forward `git pull` and restarts itself; running jobs are not interrupted. Settings → Updates switches this
+to "only tell me" or off. Only a clean clone is updated (local edits to the app's files block it), and a version
+that fails to start is rolled back and skipped. `--no-supervisor` runs the server without restarts.
+
 For long runs, open one Splunk tab with `#voyager` at the end of its URL: it becomes the keep-alive tab and
 reloads itself when Splunk ends the session, so the exports continue on their own. While an export runs, Voyager
 also asks Windows not to go to sleep (closing the lid still does).
@@ -102,6 +107,7 @@ with the new range. Each script has `--help`. The command-line tools use the def
 | --- | --- |
 | `run.py`, `app/`, `monitors/` | web app and terminal dashboard |
 | `jobrun.py` | runs one job's steps, detached from the web app |
+| `updater.py` | update check, fast-forward and rollback used by `run.py` |
 | `splunk_export.py` | resumable, windowed Splunk export |
 | `network_feed.py` | query builder, window merge and findings between the export and Payload Analyzer |
 | `pivot_graph.py`, `pivot_graph_template.html` | entity mapper |

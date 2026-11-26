@@ -144,6 +144,48 @@ class WebAppTest(unittest.TestCase):
                 wb.INV_ROOT = orig
 
 
+class UpdaterTest(unittest.TestCase):
+    """updater.py against a throwaway remote: update, local-edit guard, rollback and skip."""
+
+    def git(self, cwd, *a):
+        return subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                              capture_output=True, text=True, check=True).stdout.strip()
+
+    def test_update_cycle(self):
+        import importlib.util
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            src = t / "src"
+            src.mkdir()
+            (src / "updater.py").write_text((ROOT / "updater.py").read_text())
+            (src / "requirements.txt").write_text("")
+            self.git(src, "init", "-q", "-b", "main")
+            self.git(src, "add", "-A")
+            self.git(src, "commit", "-qm", "one")
+            subprocess.run(["git", "clone", "-q", "--bare", str(src), str(t / "remote.git")], check=True)
+            subprocess.run(["git", "clone", "-q", str(t / "remote.git"), str(t / "inst")], check=True)
+            subprocess.run(["git", "clone", "-q", str(t / "remote.git"), str(t / "dev")], check=True)
+            spec = importlib.util.spec_from_file_location("updater_t", t / "inst" / "updater.py")
+            up = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(up)
+            self.assertEqual(up.check(), 0)
+            (t / "dev" / "f.txt").write_text("two")
+            self.git(t / "dev", "add", "-A"); self.git(t / "dev", "commit", "-qm", "two"); self.git(t / "dev", "push", "-q")
+            self.assertEqual(up.check(), 1)
+            self.assertIsNone(up.status["blocked"])
+            (t / "inst" / "updater.py").write_text((t / "inst" / "updater.py").read_text() + "\n# local edit\n")
+            up.check()
+            self.assertIn("edited locally", up.status["blocked"])
+            self.assertFalse(up.apply(log=lambda m: None))
+            self.git(t / "inst", "checkout", "-q", "updater.py")
+            self.assertTrue(up.apply(log=lambda m: None))
+            self.assertEqual((t / "inst" / "f.txt").read_text(), "two")
+            self.assertTrue(up.rollback(log=lambda m: None))        # as if the new version had not started
+            self.assertFalse((t / "inst" / "f.txt").exists())
+            up.check()
+            self.assertIn("rolled back", up.status["blocked"])     # that version is not retried
+
+
 class EndToEndTest(unittest.TestCase):
     """Both modules against the mock Splunk: export -> merge -> Payload Analyzer -> findings, and pivot seed/build."""
 

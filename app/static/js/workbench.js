@@ -38,7 +38,48 @@ const WB = (() => {
   }
 
   // ---------------------------------------------------------------- settings page
-  function settingsPage(instances, def) {
+  function updatesPanel(mode) {
+    $('#u-mode').value = mode || 'apply';
+    const show = u => {
+      const parts = [];
+      if (u.current) parts.push(`version ${u.current}`);
+      if (!u.checkout) parts.push('not a git clone: updates need `git clone`');
+      else if (u.error) parts.push(u.error);
+      else if (u.behind) parts.push(`${u.behind} new commit${u.behind > 1 ? 's' : ''} on GitHub`);
+      else if (u.checked) parts.push('up to date');
+      if (u.blocked) parts.push(u.blocked);
+      if (u.checked) parts.push(`checked ${String(u.checked).replace('T', ' ')}`);
+      if (!u.supervised) parts.push('started with --no-supervisor: no automatic restart');
+      $('#u-state').textContent = parts.join(' · ');
+      $('#u-apply').style.display = u.behind && !u.blocked && u.supervised && !u.applying ? '' : 'none';
+      $('#u-log').style.display = (u.log || []).length ? '' : 'none';
+      $('#u-log').textContent = (u.log || []).join('\n');
+    };
+    api('/api/update').then(show).catch(() => {});
+    $('#u-save').onclick = async () => {
+      try { await api('/api/settings', {auto_update: $('#u-mode').value, update_interval: $('#u-int').value}); $('#u-msg').textContent = 'Saved.'; }
+      catch (e) { $('#u-msg').textContent = e.message; }
+    };
+    $('#u-check').onclick = async () => {
+      $('#u-msg').textContent = 'Checking...';
+      try { show(await api('/api/update/check', {})); $('#u-msg').textContent = ''; }
+      catch (e) { $('#u-msg').textContent = e.message; }
+    };
+    $('#u-apply').onclick = async () => {
+      $('#u-msg').textContent = 'Updating; Voyager restarts and this page reloads...';
+      try {
+        await api('/api/update/apply', {});
+        const t0 = Date.now();
+        await new Promise(r => setTimeout(r, 4000));
+        while (Date.now() - t0 < 120000) {            // wait for the restarted server
+          try { await api('/api/update'); location.reload(); return; } catch (e) { await new Promise(r => setTimeout(r, 2000)); }
+        }
+      } catch (e) { $('#u-msg').textContent = e.message; }
+    };
+  }
+
+  function settingsPage(instances, def, updateMode) {
+    updatesPanel(updateMode);
     const tbl = $('#inst-table');
     const row = (i = {}) => {
       const tr = document.createElement('tr');

@@ -93,6 +93,68 @@ def open_browser_when_ready():
     logger.warning(f"Web interface did not answer; open {url} yourself")
 
 
+RESTART = threading.Event()     # set by the updater: leave the dashboard and exit with updater.RESTART_CODE
+_UI = {}
+
+
+def request_restart():
+    RESTART.set()
+    ui = _UI.get("terminal")
+    if ui is not None:
+        ui.running = False          # the dashboard loop ends within 100 ms
+
+
+def confirm_when_ready():
+    """Once the web interface answers, an update that was just installed counts as good."""
+    import urllib.request
+    import updater
+    host = "localhost" if HOST in ("0.0.0.0", "127.0.0.1", "::") else HOST
+    for _ in range(120):
+        try:
+            urllib.request.urlopen(f"http://{host}:{PORT}/api/settings", timeout=2).read()
+            updater.confirm_started()
+            return
+        except Exception:
+            time.sleep(0.5)
+
+
+def supervise(argv):
+    """
+    Runs the server as a child process and restarts it when it asks to (after an update), so the console
+    stays with one process. If the server dies right after an update, the update is rolled back.
+    """
+    import subprocess
+    import updater
+    import voyager_settings
+    log = lambda m: print(f"[updater] {m}", flush=True)
+    s = voyager_settings.load()
+    if s.get("auto_update") == "apply" and updater.is_checkout():
+        log("checking GitHub for a new version...")
+        if updater.check() and not updater.status["blocked"]:
+            updater.apply(log)
+        elif updater.status["blocked"] or updater.status["error"]:
+            log(updater.status["blocked"] or updater.status["error"])
+    env = dict(os.environ, VOYAGER_CHILD="1")
+    args = [a for a in argv if a != "--wipe"]      # already done here, once
+    while True:
+        started = time.time()
+        p = subprocess.Popen([sys.executable, os.path.abspath(__file__)] + args, env=env)
+        while True:
+            try:
+                rc = p.wait()
+                break
+            except KeyboardInterrupt:
+                continue            # Ctrl+C reaches the server too; wait for it to finish
+        if "--no-browser" not in args:
+            args.append("--no-browser")     # don't open a new tab on every restart
+        if rc == updater.RESTART_CODE:
+            log("restarting with the new version")
+            continue
+        if rc != 0 and time.time() - started < 90 and updater.rollback(log):
+            continue
+        return rc
+
+
 def start_application(open_browser=True):
     """
     Start the application with the terminal UI
@@ -121,6 +183,18 @@ def start_application(open_browser=True):
     logger.info(f"Started SplunkVoyager web interface with Waitress on {HOST}:{PORT}")
     if open_browser:
         threading.Thread(target=open_browser_when_ready, daemon=True).start()
+    threading.Thread(target=confirm_when_ready, daemon=True).start()
+    try:
+        import updater
+        import voyager_settings
+        s = voyager_settings.load()
+        updater.restart_hook = request_restart
+        if os.environ.get("VOYAGER_CHILD") == "1":      # only under the supervisor, which does the restart
+            threading.Thread(target=updater.loop, daemon=True, name="updater",
+                             args=(request_restart, logger.info, s.get("auto_update", "apply"),
+                                   s.get("update_interval", 30))).start()
+    except Exception as e:
+        logger.error(f"Updater not started: {e}")
 
     tui_running = False
     try:
@@ -136,17 +210,28 @@ def start_application(open_browser=True):
             log_handler=terminal_log_handler # Should now work if defined above
         )
         tui_running = True
+        _UI["terminal"] = terminal
         terminal.run() # Blocks here until TUI exits (e.g., via Ctrl+C or quit command)
 
     except ImportError as e:
         logger.error(f"Terminal UI components not found: {e}. Falling back to console output.")
         print(f"Error: Terminal UI components not found: {e}")
         print(f"Running with console output only.")
+        try:
+            while not RESTART.is_set():
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
     except Exception as e:
         # This will catch the NameError if terminal_log_handler wasn't defined
         logger.error(f"Error starting terminal UI: {e}", exc_info=True) # Add exc_info for more details
         print(f"Error starting terminal UI: {e}")
         print(f"Running with console output only.")
+        try:
+            while not RESTART.is_set():     # keep serving until Ctrl+C or an update restart
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
     finally:
         # --- FIX for Shutdown: Remove the join for daemon thread ---
         if tui_running:
@@ -166,6 +251,8 @@ def main():
     parser = argparse.ArgumentParser(description='Run the SplunkVoyager application')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode with request logging')
     parser.add_argument('--no-browser', action='store_true', help="Don't open the web interface in the browser")
+    parser.add_argument('--no-supervisor', action='store_true',
+                        help="Run the server directly (no automatic restart after updates)")
     parser.add_argument('--wipe', action='store_true', help='Wipe session data (cookies, database, logs) and debug folders; investigations and settings are kept')
     args = parser.parse_args()
     
@@ -183,7 +270,12 @@ def main():
         os.environ['SPLUNKVOYAGER_DB'] = str(DB_PATH)
         
         # Start the application with terminal UI
+        if os.environ.get("VOYAGER_CHILD") != "1" and not args.no_supervisor:
+            sys.exit(supervise(sys.argv[1:]))
         start_application(open_browser=not args.no_browser)
+        if RESTART.is_set():
+            import updater
+            sys.exit(updater.RESTART_CODE)
             
     except Exception as e:
         logger.error(f"Error starting application: {str(e)}")
