@@ -73,6 +73,9 @@
         <div><label class="f">Earliest</label><input type="text" id="em-earliest" placeholder="{{ inv.earliest }}"></div>
         <div><label class="f">Latest</label><input type="text" id="em-latest" placeholder="{{ inv.latest }}"></div>
       </div>
+      <div class="hint">Empty = the investigation's range. Each value keeps its own range, so values can cover different periods in the same graph.</div>
+      <label class="hint" style="display:block;margin-top:6px;cursor:pointer"><input type="checkbox" id="em-reset">
+        New range replaces the earlier search, for values already mapped (their results are searched again)</label>
       <details>
         <summary>Pull and graph options</summary>
         <div class="row">

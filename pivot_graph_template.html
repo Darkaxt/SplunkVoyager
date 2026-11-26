@@ -236,7 +236,8 @@ function renderSide(){const n=selected;if(!n){$('#side').innerHTML=sideHelp();re
   h+=`<dt>Events (stage 1)</dt><dd>${(n.stage1||0).toLocaleString()}</dd><dt>Raw pulled</dt><dd>${n.pulled?(n.raw_events||0).toLocaleString()+' events':'no (over size limit)'}</dd>`;
   if(n.coarse)h+=`<dt>Resolution</dt><dd>hourly (stage-1 counts only)</dd>`;
   if(n.variants&&Object.keys(n.variants).length)h+=`<dt>Found as</dt><dd>${Object.entries(n.variants).sort((a,b)=>b[1]-a[1]).map(([l,c])=>`${esc(l)} (${c.toLocaleString()})`).join('<br>')}</dd>`}
- else h+=`<dt>Events</dt><dd>${(n.count||0).toLocaleString()}</dd>`;
+ else{h+=`<dt>Events</dt><dd>${(n.count||0).toLocaleString()}</dd>`;
+  const sd=n.seed&&D.seeds.find(s=>s.key===n.id);if(sd&&sd.earliest)h+=`<dt>Searched range</dt><dd class="mono">${esc(sd.earliest)} → ${esc(sd.latest||'now')}</dd>`}
  const f=n.first??(n.firstStep<T.length?T[n.firstStep]:null);
  h+=`<dt>First</dt><dd class="mono">${esc(ft(f,true,!n.coarse))}</dd><dt>Last</dt><dd class="mono">${esc(ft(n.last,true,!n.coarse))}</dd><dt>Seeds</dt><dd>${esc((n.seeds||[]).join(', '))}</dd></dl>${spark(n)}`;
  h+=`<h3>Connections (${es.length})</h3><div class="list">`+es.slice(0,40).map(e=>{const o=N.get(e.s===n.id?e.t:e.s);
@@ -264,7 +265,7 @@ document.addEventListener('click',async e=>{const m=e.target.closest('[data-map]
   const j=await r.json();m.textContent=r.ok?'queued in Voyager':('failed: '+(j.message||r.status))}catch(err){m.textContent='Voyager not reachable'}});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-copy]');if(b){navigator.clipboard.writeText(b.dataset.copy);b.textContent='copied';setTimeout(()=>b.textContent='copy command',1200)}});
 function sideHelp(){const ents=VN.filter(n=>!n.seed&&n.type!=='source');const byT={};ents.forEach(n=>byT[n.type]=(byT[n.type]||0)+1);
- return `<h2>Overview</h2><dl><dt>Seeds</dt><dd>${D.seeds.map(s=>`${esc(s.value)}<div style="color:#667085;font-size:11.5px">searched: ${esc((s.variants||[]).join(', '))}</div>`).join('')}</dd>${VE.some(e=>e.kind==='cooccur')?`<dt>Seed links</dt><dd>${VE.filter(e=>e.kind==='cooccur').map(e=>`${esc(short(N.get(e.s).label))} ⇄ ${esc(short(N.get(e.t).label))}: ${e.count.toLocaleString()}`).join('<br>')}</dd>`:''}<dt>Sources</dt><dd>${VN.filter(n=>n.type==='source').length}</dd>
+ return `<h2>Overview</h2><dl><dt>Seeds</dt><dd>${D.seeds.map(s=>`${esc(s.value)}<div style="color:#667085;font-size:11.5px">searched: ${esc((s.variants||[]).join(', '))}</div>${s.earliest?`<div style="color:#667085;font-size:11.5px">range: <span class="mono">${esc(s.earliest)} → ${esc(s.latest||'now')}</span></div>`:''}`).join('')}</dd>${VE.some(e=>e.kind==='cooccur')?`<dt>Seed links</dt><dd>${VE.filter(e=>e.kind==='cooccur').map(e=>`${esc(short(N.get(e.s).label))} ⇄ ${esc(short(N.get(e.t).label))}: ${e.count.toLocaleString()}`).join('<br>')}</dd>`:''}<dt>Sources</dt><dd>${VN.filter(n=>n.type==='source').length}</dd>
  <dt>Entities</dt><dd>${Object.entries(byT).map(([t,c])=>`${c} ${t}`).join(', ')||'—'}</dd><dt>Period</dt><dd class="mono">${esc(ft(T0))} → ${esc(ft(T1))}</dd></dl>
  <p style="color:#667085">Press <b>Play</b> to replay how the relations appeared. Edge colour = first seen (blue early → orange late), width = events (log scale); new edges flash red. Dashed nodes are infrastructure (present in most events of a source), hidden by default.</p>
  ${D.sanitized?'<p class="tag infra">Sanitised build: identifiers replaced, samples and pivots removed.</p>':''}`}

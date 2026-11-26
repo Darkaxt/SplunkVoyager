@@ -120,7 +120,8 @@ const WB = (() => {
 
     // entity mapper form
     const emOpts = () => ({earliest: $('#em-earliest').value.trim(), latest: $('#em-latest').value.trim(),
-      include: $('#em-include').value, max_events: $('#em-max').value, bin: $('#em-bin').value, group: $('#em-group').value});
+      include: $('#em-include').value, max_events: $('#em-max').value, bin: $('#em-bin').value, group: $('#em-group').value,
+      reset_range: $('#em-reset').checked});
     async function mapValues(values, btn) {
       $('#em-err').textContent = '';
       if (btn) btn.disabled = true;
@@ -137,7 +138,7 @@ const WB = (() => {
 
     // findings
     function findingsHtml(inv) {
-      const mapped = new Set((inv.entities.seeds || []).map(s => s.toLowerCase()));
+      const mapped = new Set((inv.entities.seeds || []).map(s => s.value.toLowerCase()));
       const runs = inv.network.filter(n => n.findings || n.report);
       if (!runs.length) return `<div class="empty">${inv.network.length ? 'Waiting for the network analysis to finish.' : 'Run a network analysis to see attack sources and callbacks here.'}</div>`;
       return runs.map(n => {
@@ -179,7 +180,8 @@ const WB = (() => {
     // entity state
     function entityHtml(inv) {
       const e = inv.entities;
-      let h = e.seeds.length ? e.seeds.map(s => `<span class="pill mono">${esc(s)}</span>`).join('') : '<div class="empty">Nothing yet.</div>';
+      let h = e.seeds.length ? e.seeds.map(s => `<span class="pill mono" title="searched ${esc(s.earliest)} → ${esc(s.latest || 'now')}">${esc(s.value)}
+        <span class="muted">${esc(s.earliest)} → ${esc(s.latest || 'now')}</span></span>`).join('') : '<div class="empty">Nothing yet.</div>';
       if (e.graph) h += `<div class="actions" style="margin-top:6px"><a class="b" target="_blank" href="/inv/${slug}/files/${esc(e.graph)}">Open graph</a>
         ${e.csv ? `<a class="b" href="/inv/${slug}/files/${esc(e.csv)}">All entities (CSV)</a>` : ''}</div>`;
       $('#em-rebuild').disabled = !e.seeds.length;

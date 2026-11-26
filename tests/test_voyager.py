@@ -210,7 +210,7 @@ class EndToEndTest(unittest.TestCase):
                 self.assertEqual(st[j]["status"], "done", wb.read_log(inv["slug"], j))
             got = wb.get_investigation(inv["slug"])
             self.assertEqual({s["value"] for s in got["network"][0]["findings"]["sources"]}, {"203.0.113.7", "198.51.100.23"})
-            self.assertEqual(got["entities"]["seeds"], ["203.0.113.7"])
+            self.assertEqual([s["value"] for s in got["entities"]["seeds"]], ["203.0.113.7"])
             self.assertTrue(got["entities"]["graph"])
         finally:
             voyager_settings.SETTINGS_PATH, wb.INV_ROOT = orig_settings, orig_root

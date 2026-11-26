@@ -118,7 +118,8 @@ def get_investigation(slug):
     inv["network"] = net
     ed = d / "entities"
     case = _read(ed / "case.json", {"seeds": []})
-    inv["entities"] = {"seeds": [s["value"] for s in case.get("seeds", [])],
+    inv["entities"] = {"seeds": [{"value": s["value"], "earliest": s.get("earliest"), "latest": s.get("latest")}
+                                 for s in case.get("seeds", [])],
                        "graph": (ed / "graph.html").is_file() and "entities/graph.html",
                        "csv": (ed / "graph_entities.csv").is_file() and "entities/graph_entities.csv"}
     return inv
@@ -359,7 +360,7 @@ def _build_step(d, slug, bin_min=5, group="sourcetype"):
 
 
 def start_entities(slug, values, earliest=None, latest=None, include="", max_events=500000, bin_min=5,
-                   group="sourcetype", title=""):
+                   group="sourcetype", title="", reset_range=False):
     d = inv_dir(slug)
     inv = _read(d / "investigation.json", {})
     values = [v.strip() for v in values if v and v.strip()]
@@ -375,6 +376,8 @@ def start_entities(slug, values, earliest=None, latest=None, include="", max_eve
                 "--max-events", str(int(max_events))] + common
         if include.strip():
             argv += ["--include", include.strip()]
+        if reset_range:
+            argv.append("--reset-range")   # a value already mapped with another range is searched again
         steps.append({"name": f"Search {v[:60]}", "argv": argv,
                       "progress": [str(ed / "seeds" / "*" / "stage1" / "manifest.json"),
                                    str(ed / "seeds" / "*" / "raw" / "*" / "manifest.json")]})

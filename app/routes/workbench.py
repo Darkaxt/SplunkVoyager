@@ -144,7 +144,7 @@ def api_entities(slug):
     try:
         jid = wb.start_entities(slug, d.get("values") or [], d.get("earliest") or None, d.get("latest") or None,
                                 d.get("include", ""), _int(d.get("max_events"), 500000), _int(d.get("bin"), 5),
-                                d.get("group") or "sourcetype", d.get("title", ""))
+                                d.get("group") or "sourcetype", d.get("title", ""), bool(d.get("reset_range")))
         return jsonify({"status": "started", "job": jid})
     except (ValueError, FileNotFoundError) as e:
         return _err(e)
