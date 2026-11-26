@@ -118,6 +118,7 @@ def get_investigation(slug):
                     "can_reanalyse": (nd / "requests.jsonl").is_file() and not busy
                                      and j["status"] not in ("running", "waiting", "queued"),
                     "report": (nd / "report.html").is_file() and f"network/{j['id']}/report.html",
+                    "map": (nd / "attack_map.html").is_file() and f"network/{j['id']}/attack_map.html",
                     "findings": _read(nd / "findings.json")})
     inv["network"] = net
     ed = d / "entities"
@@ -351,7 +352,7 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
          "progress": [str(nd / "export" / "manifest.json")]},
         {"name": "Merge time windows", "argv": [PY, str(ROOT / "network_feed.py"), "merge", str(nd / "export"),
                                                 "-o", str(nd / "requests.jsonl")]},
-    ] + _analysis_steps(nd)
+    ] + _analysis_steps(nd, f"Attack map · {title}")
     job = _read(d / "jobs" / jid / "job.json")
     job["steps"] = steps
     _write(d / "jobs" / jid / "job.json", job)
@@ -359,7 +360,7 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
     return jid
 
 
-def _analysis_steps(nd):
+def _analysis_steps(nd, title="Attack map"):
     pa = ROOT / "payload_analyzer"
     return [
         {"name": "Payload analysis", "argv": [PY, "-I", str(pa / "payload_analyzer.py"), "pipeline",
@@ -368,6 +369,8 @@ def _analysis_steps(nd):
                                          "-o", str(nd / "report.html")]},
         {"name": "Findings for the entity mapper", "argv": [PY, str(ROOT / "network_feed.py"), "iocs",
                                                              str(nd / "analysis.json"), "-o", str(nd / "findings.json")]},
+        {"name": "Attack map", "argv": [PY, str(ROOT / "network_map.py"), str(nd / "analysis.json"),
+                                        "-o", str(nd / "attack_map.html"), "--title", title]},
     ]
 
 
@@ -382,7 +385,8 @@ def reanalyze_network(slug, jid):
         if st["status"] in ("running", "waiting", "queued") and (j.name == jid or (st.get("meta") or {}).get("target") == jid):
             raise RuntimeError("this run is already being processed")
     title = _read(d / "jobs" / jid / "job.json", {}).get("title", jid)
-    new = _new_job(d, "reanalysis", f"Re-analyse: {title}", _analysis_steps(nd), meta={"target": jid})
+    new = _new_job(d, "reanalysis", f"Re-analyse: {title}", _analysis_steps(nd, f"Attack map · {title}"),
+                   meta={"target": jid})
     _spawn(d / "jobs" / new)
     return new
 

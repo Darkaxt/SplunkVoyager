@@ -193,6 +193,7 @@ const WB = (() => {
           <div class="toolbar"><div><b>${esc(n.title)}</b> ${badge(n.status)}
             ${cats.map(([k, v]) => `<span class="badge cat">${esc(k)} ${v}</span>`).join('')}</div>
             <div>${n.report ? `<a class="b" target="_blank" href="/inv/${slug}/files/${esc(n.report)}">Open report</a>` : ''}
+              ${n.map ? `<a class="b" target="_blank" href="/inv/${slug}/files/${esc(n.map)}">Open attack map</a>` : ''}
               ${n.can_reanalyse ? `<button data-reanalyse="${esc(n.job)}" title="Run Payload Analyzer again on this export (after updating it). Splunk isn't queried.">Re-analyse</button>` : ''}
               <button class="map-sel">Map selected</button></div></div>
           <div class="grid2" style="margin-top:6px">

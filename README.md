@@ -74,6 +74,13 @@ and double-encoded forms. Sources with more events than the pull limit are only 
 containing* forces a pull. In the graph, *Search it in Voyager* on any node adds that value to the same
 investigation. When two searched values appear in the same event, they get a direct (dashed) link.
 
+**Attack map.** *Open attack map* on a network run shows its source addresses and the sites they attacked:
+arcs coloured by the furthest phase reached (or by attack type), an hourly view of attack types, playback with a
+live feed, and per source / site / path / arc the payloads in order. Sites expand into their paths (click the +
+or the *paths* switch). Levels (probing, enumeration, extraction, sustained) are rule-based, with the rules shown
+in the page; they describe what the payloads show, not whether an attack succeeded.
+`python network_map.py analysis.json -o attack_map.html [--sanitize]` builds it by hand.
+
 **After updating Payload Analyzer**, *Re-analyse* on a network run runs the analysis, report and findings
 again on the export it already has; Splunk isn't queried.
 
@@ -115,6 +122,7 @@ with the new range. Each script has `--help`. The command-line tools use the def
 | `updater.py` | update check, fast-forward and rollback used by `run.py` |
 | `splunk_export.py` | resumable, windowed Splunk export |
 | `network_feed.py` | query builder, window merge and findings between the export and Payload Analyzer |
+| `network_map.py`, `network_map_template.html` | attack map of a network run |
 | `exportfiles.py` | export folders as part files or `export.zip`; `pack` command |
 | `pivot_graph.py`, `pivot_graph_template.html` | entity mapper |
 | `payload_analyzer/` | Payload Analyzer, unchanged copy (commit in `UPSTREAM_COMMIT`), standard library only |

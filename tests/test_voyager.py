@@ -261,11 +261,23 @@ class EndToEndTest(unittest.TestCase):
         self.run_py("network_feed.py", "iocs", d / "analysis.json", "-o", d / "findings.json")
         f = json.loads((d / "findings.json").read_text())
         srcs = {s["value"]: s for s in f["sources"]}
-        self.assertEqual(set(srcs), {"203.0.113.7", "198.51.100.23"})
+        self.assertEqual(set(srcs), {"203.0.113.7", "198.51.100.23", "192.0.2.200"})
         self.assertIn("sqli", srcs["203.0.113.7"]["categories"])
         self.assertTrue({"ssrf", "file_access", "rce"} <= set(srcs["198.51.100.23"]["categories"]))
         self.assertIn("cb.attacker.example", {c["value"] for c in f["callbacks"]})
         self.assertTrue((d / "report.html").stat().st_size > 10000)
+        # attack map: levels from the payloads' phases and progression
+        self.run_py("network_map.py", d / "analysis.json", "-o", d / "attack_map.html")
+        import network_map
+        m = network_map.build(d / "analysis.json")
+        lv = {(p["src"], p["site"]): network_map.LEVELS[p["level"]][0] for p in m["pairs"]}
+        self.assertEqual(lv[("203.0.113.7", "shop.example")], "sustained")      # 9 SQLi payloads, rising
+        self.assertEqual(lv[("192.0.2.200", "shop.example")], "probing")        # the scanner
+        self.assertEqual(lv[("198.51.100.23", "app.example")], "extraction")    # 2 payloads: too few for "in order"
+        self.assertIn("sustained", (d / "attack_map.html").read_text(encoding="utf-8"))
+        s = json.dumps(network_map.build(d / "analysis.json", sanitize=True))
+        for leak in ("203.0.113", "198.51.100", "shop.example", "/search", "information_schema"):
+            self.assertNotIn(leak, s)
 
     def test_gui_jobs(self):
         """The jobs the GUI starts (job runner + generated command lines), both modules at once."""
@@ -290,7 +302,9 @@ class EndToEndTest(unittest.TestCase):
             for j in (jn, je):
                 self.assertEqual(st[j]["status"], "done", wb.read_log(inv["slug"], j))
             got = wb.get_investigation(inv["slug"])
-            self.assertEqual({s["value"] for s in got["network"][0]["findings"]["sources"]}, {"203.0.113.7", "198.51.100.23"})
+            self.assertEqual({s["value"] for s in got["network"][0]["findings"]["sources"]},
+                             {"203.0.113.7", "198.51.100.23", "192.0.2.200"})
+            self.assertTrue(got["network"][0]["map"])
             self.assertEqual([s["value"] for s in got["entities"]["seeds"]], ["203.0.113.7"])
             self.assertTrue(got["entities"]["graph"])
             # re-analyse the finished export (as after updating Payload Analyzer): no Splunk step
@@ -304,6 +318,7 @@ class EndToEndTest(unittest.TestCase):
                 time.sleep(1)
             self.assertEqual(st[jr]["status"], "done", wb.read_log(inv["slug"], jr))
             self.assertNotIn("Splunk export", st[jr]["steps"])
+            self.assertIn("Attack map", st[jr]["steps"])
             self.assertTrue(rep.is_file())
             with self.assertRaises(RuntimeError):            # belongs to its run
                 wb.delete_job(inv["slug"], jr)

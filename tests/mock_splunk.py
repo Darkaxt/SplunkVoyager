@@ -46,6 +46,26 @@ for q in ["q=%27", "q=%27%20OR%201%3D1--", "q=%27%20UNION%20SELECT%20user%2Cpass
     for k in range(3):
         web(t, A1, "shop.example", "/search", q, 500)
         t += 20
+# attacker 1 later: enumeration (03:xx) then extraction (04:xx) on the same parameter
+t = T0 + 86400 + 3 * 3600 + 300
+for q in ["q=%27%20UNION%20SELECT%20COUNT(*)%20FROM%20information_schema.tables--",
+          "q=%27%20AND%20(SELECT%20LENGTH(password)%20FROM%20users%20LIMIT%201)%3E5--",
+          "q=%27%20UNION%20SELECT%20table_name%2Ccolumn_name%20FROM%20information_schema.columns--"]:
+    web(t, A1, "shop.example", "/search", q, 200)
+    t += 400
+t = T0 + 86400 + 4 * 3600 + 120
+for q in ["q=%27%20UNION%20SELECT%20email%2Cpassword_hash%20FROM%20customers--",
+          "q=%27%20AND%20extractvalue(1%2Cconcat(0x7e%2C(SELECT%20password_hash%20FROM%20customers%20LIMIT%201)))--",
+          "q=%27%20UNION%20SELECT%20card_number%2Cexpiry%2Ccvv%20FROM%20payments%20WHERE%20id%3E0--"]:
+    web(t, A1, "shop.example", "/search", q, 200)
+    t += 300
+# a scanner that only probes, both sites
+A3 = "192.0.2.200"
+t = T0 + 2 * 86400 + 3600
+for site in ("shop.example", "app.example"):
+    for q in ["id=1%27", "id=1%20AND%201%3D1", "id=%3Cscript%3Ealert(1)%3C%2Fscript%3E"]:
+        web(t, A3, site, "/item", q, 400)
+        t += 60
 # attacker 2: SSRF, file read and command injection on the app, day 2 02:59
 t = T0 + 86400 + 2 * 3600 + 59 * 60
 for q in ["url=http%3A%2F%2F127.0.0.1%3A7001%2Fconsole", "url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2F"]:
