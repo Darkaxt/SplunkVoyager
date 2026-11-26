@@ -112,7 +112,11 @@ def get_investigation(slug):
         if j["kind"] != "network":
             continue
         nd = d / "network" / j["id"]
-        net.append({"job": j["id"], "title": j["title"], "status": j["status"],
+        busy = any(x["kind"] == "reanalysis" and (x.get("meta") or {}).get("target") == j["id"]
+                   and x["status"] in ("running", "waiting", "queued") for x in jobs)
+        net.append({"job": j["id"], "title": j["title"], "status": "reanalysing" if busy else j["status"],
+                    "can_reanalyse": (nd / "requests.jsonl").is_file() and not busy
+                                     and j["status"] not in ("running", "waiting", "queued"),
                     "report": (nd / "report.html").is_file() and f"network/{j['id']}/report.html",
                     "findings": _read(nd / "findings.json")})
     inv["network"] = net
@@ -334,6 +338,17 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
          "progress": [str(nd / "export" / "manifest.json")]},
         {"name": "Merge time windows", "argv": [PY, str(ROOT / "network_feed.py"), "merge", str(nd / "export"),
                                                 "-o", str(nd / "requests.jsonl")]},
+    ] + _analysis_steps(nd)
+    job = _read(d / "jobs" / jid / "job.json")
+    job["steps"] = steps
+    _write(d / "jobs" / jid / "job.json", job)
+    _spawn(d / "jobs" / jid)
+    return jid
+
+
+def _analysis_steps(nd):
+    pa = ROOT / "payload_analyzer"
+    return [
         {"name": "Payload analysis", "argv": [PY, "-I", str(pa / "payload_analyzer.py"), "pipeline",
                                               str(nd / "requests.jsonl"), "-o", str(nd / "analysis.json")]},
         {"name": "HTML report", "argv": [PY, "-I", str(pa / "report_builder.py"), str(nd / "analysis.json"),
@@ -341,11 +356,22 @@ def start_network(slug, base, extract="", fields=None, earliest=None, latest=Non
         {"name": "Findings for the entity mapper", "argv": [PY, str(ROOT / "network_feed.py"), "iocs",
                                                              str(nd / "analysis.json"), "-o", str(nd / "findings.json")]},
     ]
-    job = _read(d / "jobs" / jid / "job.json")
-    job["steps"] = steps
-    _write(d / "jobs" / jid / "job.json", job)
-    _spawn(d / "jobs" / jid)
-    return jid
+
+
+def reanalyze_network(slug, jid):
+    """Run Payload Analyzer again on a finished export (e.g. after updating it); Splunk isn't queried."""
+    d = inv_dir(slug)
+    nd = d / "network" / jid
+    if not (nd / "requests.jsonl").is_file():
+        raise ValueError("this run has no merged export yet: let it finish (or Resume it) first")
+    for j in (d / "jobs").glob("*"):
+        st = job_status(d, j.name, tail=0)
+        if st["status"] in ("running", "waiting", "queued") and (j.name == jid or (st.get("meta") or {}).get("target") == jid):
+            raise RuntimeError("this run is already being processed")
+    title = _read(d / "jobs" / jid / "job.json", {}).get("title", jid)
+    new = _new_job(d, "reanalysis", f"Re-analyse: {title}", _analysis_steps(nd), meta={"target": jid})
+    _spawn(d / "jobs" / new)
+    return new
 
 
 # ------------------------------------------------------------------ module: entity evolution mapper (pivot graph)

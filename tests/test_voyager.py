@@ -213,6 +213,18 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual({s["value"] for s in got["network"][0]["findings"]["sources"]}, {"203.0.113.7", "198.51.100.23"})
             self.assertEqual([s["value"] for s in got["entities"]["seeds"]], ["203.0.113.7"])
             self.assertTrue(got["entities"]["graph"])
+            # re-analyse the finished export (as after updating Payload Analyzer): no Splunk step
+            rep = wb.inv_dir(inv["slug"]) / "network" / jn / "report.html"
+            rep.unlink()
+            jr = wb.reanalyze_network(inv["slug"], jn)
+            for _ in range(120):
+                st = {j["id"]: j for j in wb.get_investigation(inv["slug"])["jobs"]}
+                if st[jr]["status"] in ("done", "failed"):
+                    break
+                time.sleep(1)
+            self.assertEqual(st[jr]["status"], "done", wb.read_log(inv["slug"], jr))
+            self.assertNotIn("Splunk export", st[jr]["steps"])
+            self.assertTrue(rep.is_file())
         finally:
             voyager_settings.SETTINGS_PATH, wb.INV_ROOT = orig_settings, orig_root
             for k, v in saved.items():

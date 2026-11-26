@@ -69,6 +69,9 @@ and double-encoded forms. Sources with more events than the pull limit are only 
 containing* forces a pull. In the graph, *Search it in Voyager* on any node adds that value to the same
 investigation. When two searched values appear in the same event, they get a direct (dashed) link.
 
+**After updating Payload Analyzer**, *Re-analyse* on a network run runs the analysis, report and findings
+again on the export it already has; Splunk isn't queried.
+
 **Jobs.** Each run is a job with steps and a log. Jobs keep running when you close the browser or restart
 Voyager. *Stop* also cancels its Splunk searches; *Resume* continues an interrupted or stopped job where it
 stopped, without repeating finished windows.

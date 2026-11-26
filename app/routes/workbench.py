@@ -138,6 +138,15 @@ def api_network(slug):
         return _err(e)
 
 
+@workbench_bp.route("/api/inv/<slug>/network/<jid>/reanalyze", methods=["POST"])
+def api_reanalyze(slug, jid):
+    _json()
+    try:
+        return jsonify({"status": "started", "job": wb.reanalyze_network(slug, jid)})
+    except (ValueError, RuntimeError, FileNotFoundError) as e:
+        return _err(e)
+
+
 @workbench_bp.route("/api/inv/<slug>/entities", methods=["POST"])
 def api_entities(slug):
     d = _json()

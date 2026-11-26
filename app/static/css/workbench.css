@@ -37,7 +37,7 @@
 .wb table.t td { padding:6px 8px; border-bottom:1px solid #303338; vertical-align:top; }
 .wb table.t tr:hover td { background:#2a2c31; }
 .wb .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11.5px; font-weight:600; background:var(--panel2); color:var(--muted); }
-.wb .badge.running, .wb .badge.queued { background:#1d3b55; color:#8cc8f5; }
+.wb .badge.running, .wb .badge.queued, .wb .badge.reanalysing { background:#1d3b55; color:#8cc8f5; }
 .wb .badge.waiting { background:#463a1a; color:#f0c674; }
 .wb .badge.done { background:#173c2c; color:#6fd3a3; }
 .wb .badge.failed { background:#4a1e1c; color:#ff8a84; }

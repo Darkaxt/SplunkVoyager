@@ -152,6 +152,7 @@ const WB = (() => {
           <div class="toolbar"><div><b>${esc(n.title)}</b> ${badge(n.status)}
             ${cats.map(([k, v]) => `<span class="badge cat">${esc(k)} ${v}</span>`).join('')}</div>
             <div>${n.report ? `<a class="b" target="_blank" href="/inv/${slug}/files/${esc(n.report)}">Open report</a>` : ''}
+              ${n.can_reanalyse ? `<button data-reanalyse="${esc(n.job)}" title="Run Payload Analyzer again on this export (after updating it). Splunk isn't queried.">Re-analyse</button>` : ''}
               <button class="map-sel">Map selected</button></div></div>
           <div class="grid2" style="margin-top:6px">
             <div><h3>Attack sources (${(f.sources || []).length})</h3>
@@ -167,7 +168,14 @@ const WB = (() => {
           </div></div>`;
       }).join('');
     }
-    $('#nf').addEventListener('click', e => {
+    $('#nf').addEventListener('click', async e => {
+      const ra = e.target.closest('[data-reanalyse]');
+      if (ra) {
+        ra.disabled = true;
+        try { await api(`${base}/network/${ra.dataset.reanalyse}/reanalyze`, {}); refresh(); }
+        catch (err) { alert(err.message); ra.disabled = false; }
+        return;
+      }
       const b = e.target.closest('[data-map]');
       if (b) return mapValues([b.dataset.map], b);
       const s = e.target.closest('.map-sel');
