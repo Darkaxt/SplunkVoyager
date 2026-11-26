@@ -21,7 +21,7 @@ DB_PATH = os.path.join(DATA_DIR, DB_NAME)
 # Splunk URL, locale and app: data/settings.json via the Settings page (see voyager_settings.py)
 
 # Session settings
-BEACON_INTERVAL = 300  # 5 minutes
+BEACON_INTERVAL = 240  # keep-alive request per session every 4 minutes (Splunk idle timeouts are usually 60)
 SESSION_TIMEOUT = 3600  # 1 hour - for when a session is considered stale
 
 # Flask settings

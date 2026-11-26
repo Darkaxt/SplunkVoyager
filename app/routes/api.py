@@ -37,14 +37,19 @@ def _want_reload(keepalive, cookies_valid):
     return False
 
 
+def request_browser_refresh(reason):
+    """Queue a reload of the keep-alive tab (served with its next cookie post)."""
+    with _refresh_lock:
+        _refresh["requested"] = _time.time()
+        _refresh["reason"] = str(reason)[:200]
+    logger.info(f"Browser refresh requested: {_refresh['reason']}")
+
+
 @api_bp.route('/request_refresh', methods=['POST'])
 def request_refresh():
     """Called by splunk_export.py when its Splunk session stops working."""
     data = request.get_json(silent=True) or {}
-    with _refresh_lock:
-        _refresh["requested"] = _time.time()
-        _refresh["reason"] = str(data.get("reason", ""))[:200]
-    logger.info(f"Browser refresh requested: {_refresh['reason']}")
+    request_browser_refresh(data.get("reason", ""))
     return jsonify({'status': 'queued'})
 
 # --- Routes related to Sessions and Cookies (Unchanged) ---

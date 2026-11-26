@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -217,6 +218,39 @@ class EndToEndTest(unittest.TestCase):
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
+
+    def test_keepalive(self):
+        import voyager_settings
+        from app.services import session as ss
+        import app.routes.api as api
+        orig = voyager_settings.SETTINGS_PATH
+        voyager_settings.SETTINGS_PATH = Path(self.tmp.name, "ka_settings.json")
+        saved = os.environ.pop("SPLUNK_BASE", None)
+        try:
+            voyager_settings.save({"instances": [{"name": "mock", "base": self.base}]})
+            self.assertEqual(ss.keepalive_ping({"splunkd_8000": "x"}, "127.0.0.1"), ("ok", "tester"))
+            self.assertEqual(ss.keepalive_ping({"splunkd_8000": "expired"}, "127.0.0.1")[0], "expired")
+            voyager_settings.save({"instances": [{"name": "down", "base": "http://127.0.0.1:9"}]})
+            self.assertEqual(ss.keepalive_ping({"splunkd_8000": "x"}, "127.0.0.1")[0], "error")
+            # the loop: network error -> keeps going; expired -> stops and queues a reload of the keep-alive tab
+            answers = iter([("error", "down"), ("ok", "tester"), ("expired", "HTTP 401")])
+            calls, statuses = [], []
+            fake_session = type("S", (), {"get_by_id": staticmethod(lambda i: {"id": i}),
+                                          "update_status": staticmethod(lambda i, v: statuses.append(v))})
+            fake_cookie = type("C", (), {"get_for_session": staticmethod(lambda i: {"splunkd_8000": "x"})})
+            with unittest.mock.patch.object(ss, "keepalive_ping", lambda c, d: calls.append(1) or next(answers)), \
+                 unittest.mock.patch.object(ss, "Session", fake_session), unittest.mock.patch.object(ss, "Cookie", fake_cookie), \
+                 unittest.mock.patch.object(ss, "BEACON_INTERVAL", 0), unittest.mock.patch.object(ss, "KEEPALIVE_RETRY", 0):
+                before = api._refresh["requested"]
+                ss.active_beacons["d_1"] = True
+                ss.session_beacon("d", 1)
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(statuses, [True, False])
+            self.assertGreater(api._refresh["requested"], before)
+        finally:
+            voyager_settings.SETTINGS_PATH = orig
+            if saved is not None:
+                os.environ["SPLUNK_BASE"] = saved
 
     def test_entity_mapper(self):
         case = Path(self.tmp.name, "case")

@@ -127,6 +127,8 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         u, q = urlparse(self.path), parse_qs(urlparse(self.path).query)
+        if "splunkd_8000=expired" in (self.headers.get("Cookie") or "") and "/splunkd/" in u.path:
+            return self.send(401, "{}")       # a session whose splunkd half has ended
         if u.path.endswith("/config"):
             return self.send(200, json.dumps({"USERNAME": "tester", "DEFAULT_NAMESPACE": "search"}))
         if u.path.endswith("/current-context"):

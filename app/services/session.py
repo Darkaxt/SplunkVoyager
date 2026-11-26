@@ -91,17 +91,53 @@ def validate_session(cookies, domain):
         logger.exception(f"Unexpected error validating session for {domain}: {str(e)}") # Use logger.exception
         return False, None, None
 
+KEEPALIVE_RETRY = 60   # seconds between tries while Splunk can't be reached
+
+
+def keepalive_ping(cookies, domain):
+    """
+    One request that keeps both halves of a Splunk Web session alive: it goes through Splunk Web (its idle
+    timer) to splunkd (the other idle timer). /config alone is answered by Splunk Web and lets splunkd's
+    session expire.
+
+    Returns ("ok", username) | ("expired", reason) | ("error", reason) - "error" means Splunk couldn't be
+    reached (network, VPN, laptop waking up): try again, the session may well still be alive.
+    """
+    try:
+        with use_instance(domain):
+            url = splunk_url("splunkd/__raw/services/authentication/current-context")
+        r = get_session().get(url, params={"output_mode": "json"}, timeout=20,
+                              headers={"Accept": "application/json", "Cookie": cookies_to_header(cookies)})
+    except requests.exceptions.RequestException as e:
+        return "error", f"Splunk not reachable: {e.__class__.__name__}"
+    except RuntimeError as e:          # no instance configured
+        return "error", str(e)
+    if r.status_code in (401, 403):
+        return "expired", f"HTTP {r.status_code}"
+    if r.status_code >= 400:
+        return "error", f"HTTP {r.status_code}"
+    try:
+        user = r.json()["entry"][0]["content"].get("username")
+    except (ValueError, KeyError, IndexError, TypeError):
+        # Splunk Web's login page (HTML) instead of JSON: the web session is gone
+        return "expired", "login page returned"
+    return ("ok", user) if user else ("expired", "no user in session")
+
+
 def session_beacon(domain, session_id):
     """
-    Beacon thread to keep a session alive
-    
+    Keeps a session alive while Voyager runs: a request through Splunk Web to splunkd every BEACON_INTERVAL.
+    Network errors don't end it (it retries every minute); only Splunk saying the session is gone does, and
+    then the keep-alive tab is asked to reload.
+
     Args:
         domain (str): The domain name
         session_id (int): The session ID
     """
     beacon_key = f"{domain}_{session_id}"
-    
+
     while beacon_key in active_beacons and active_beacons[beacon_key]:
+        wait = BEACON_INTERVAL
         try:
             # Get the session from the database
             session = Session.get_by_id(session_id)
@@ -115,26 +151,30 @@ def session_beacon(domain, session_id):
                 logger.error(f"Beacon: No cookies found for session {session_id}")
                 break
                 
-            # Validate the session
-            is_valid, username, _ = validate_session(cookies, domain)
-            
-            # Update the session status
-            Session.update_status(session_id, is_valid)
-            
-            if is_valid:
-                logger.info(f"Beacon: Session for {domain} (ID: {session_id}) is still valid")
-            else:
-                logger.warning(f"Beacon: Session for {domain} (ID: {session_id}) has expired")
+            state, detail = keepalive_ping(cookies, domain)
+            if state == "ok":
+                Session.update_status(session_id, True)
+                logger.info(f"Keep-alive: session for {domain} (ID: {session_id}) active as {detail}")
+            elif state == "expired":
+                Session.update_status(session_id, False)
+                logger.warning(f"Keep-alive: session for {domain} (ID: {session_id}) ended ({detail}); "
+                               f"asking the keep-alive tab to reload")
+                try:
+                    from app.routes.api import request_browser_refresh
+                    request_browser_refresh(f"session for {domain} ended ({detail})")
+                except Exception as e:
+                    logger.error(f"Keep-alive: could not request a tab reload: {e}")
                 active_beacons[beacon_key] = False
                 break
-                
+            else:
+                logger.warning(f"Keep-alive: {domain} (ID: {session_id}): {detail}; trying again in {KEEPALIVE_RETRY}s")
+                wait = KEEPALIVE_RETRY
+
         except Exception as e:
-            logger.error(f"Error in session beacon: {str(e)}")
-            active_beacons[beacon_key] = False
-            break
-            
-        # Sleep for the beacon interval
-        time.sleep(BEACON_INTERVAL)
+            logger.error(f"Keep-alive error for {domain} (ID: {session_id}): {e}; trying again in {KEEPALIVE_RETRY}s")
+            wait = KEEPALIVE_RETRY
+
+        time.sleep(wait)
 
 def start_beacon(domain, session_id):
     """
