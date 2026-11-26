@@ -214,7 +214,7 @@ const WB = (() => {
               ${running ? `<button class="danger" data-act="stop" data-j="${esc(j.id)}">Stop</button>` : ''}
               ${['failed', 'interrupted', 'stopped'].includes(j.status) ? `<button data-act="resume" data-j="${esc(j.id)}">Resume</button>` : ''}
               <button data-log="${esc(j.id)}">${openLogs.has(j.id) ? 'Hide log' : 'Log'}</button>
-              ${!running ? `<button class="danger" data-act="delete" data-j="${esc(j.id)}" title="Remove this job and its network results">✕</button>` : ''}
+              ${!running && j.kind !== 'reanalysis' ? `<button class="danger" data-act="delete" data-j="${esc(j.id)}" title="${j.kind === 'network' ? 'Remove this run: its log, export, report and re-analyses' : 'Remove this job and its log'}">✕</button>` : ''}
             </td></tr>
             ${openLogs.has(j.id) ? `<tr><td colspan="6"><pre class="log" id="log-${esc(j.id)}">${esc(j.log || '')}</pre></td></tr>` : ''}`;
         }).join('') + '</table>';
@@ -224,7 +224,7 @@ const WB = (() => {
       if (l) { openLogs.has(l.dataset.log) ? openLogs.delete(l.dataset.log) : openLogs.add(l.dataset.log); render(last); return; }
       const a = e.target.closest('[data-act]');
       if (!a) return;
-      if (a.dataset.act === 'delete' && !confirm('Remove this job and its results?')) return;
+      if (a.dataset.act === 'delete' && !confirm(a.title + '?')) return;
       a.disabled = true;
       try { await api(`${base}/jobs/${a.dataset.j}/${a.dataset.act}`, {}); } catch (err) { alert(err.message); }
       refresh();

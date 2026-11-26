@@ -225,6 +225,12 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual(st[jr]["status"], "done", wb.read_log(inv["slug"], jr))
             self.assertNotIn("Splunk export", st[jr]["steps"])
             self.assertTrue(rep.is_file())
+            with self.assertRaises(RuntimeError):            # belongs to its run
+                wb.delete_job(inv["slug"], jr)
+            wb.delete_job(inv["slug"], jn)                   # the run takes its re-analyses with it
+            left = {j["id"] for j in wb.get_investigation(inv["slug"])["jobs"]}
+            self.assertFalse({jn, jr} & left)
+            self.assertFalse((wb.inv_dir(inv["slug"]) / "network" / jn).exists())
         finally:
             voyager_settings.SETTINGS_PATH, wb.INV_ROOT = orig_settings, orig_root
             for k, v in saved.items():

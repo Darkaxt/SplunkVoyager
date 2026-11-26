@@ -228,12 +228,25 @@ def stop_job(slug, jid):
 
 
 def delete_job(slug, jid):
+    """Remove a job and its log; for a network run also its results and its re-analysis jobs."""
+    import shutil
     d = inv_dir(slug)
     st = job_status(d, jid, tail=0)
+    if st["kind"] == "reanalysis":
+        raise RuntimeError("a re-analysis belongs to its network run: delete that run instead")
     if st["status"] in ("running", "waiting", "queued"):
         raise RuntimeError("stop the job first")
-    import shutil
+    followups = []
+    if st["kind"] == "network":
+        for j in (d / "jobs").glob("reanalysis-*"):
+            fs = job_status(d, j.name, tail=0)
+            if (fs.get("meta") or {}).get("target") == jid:
+                if fs["status"] in ("running", "waiting", "queued"):
+                    raise RuntimeError("a re-analysis of this run is still running: stop it first")
+                followups.append(j)
     shutil.rmtree(d / "jobs" / jid, ignore_errors=True)
+    for j in followups:
+        shutil.rmtree(j, ignore_errors=True)
     if st["kind"] == "network":
         shutil.rmtree(d / "network" / jid, ignore_errors=True)
 
