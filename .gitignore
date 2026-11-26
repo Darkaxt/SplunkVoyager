@@ -16,3 +16,5 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+# folders created by Payload Analyzer tests that assume an E: drive
+E:*
