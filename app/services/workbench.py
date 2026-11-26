@@ -124,6 +124,21 @@ def get_investigation(slug):
     return inv
 
 
+def delete_investigation(slug):
+    """Stop the investigation's jobs (and their Splunk searches), then remove its folder."""
+    import shutil
+    d = inv_dir(slug)
+    for j in (d / "jobs").glob("*"):
+        if j.is_dir() and job_status(d, j.name, tail=0)["status"] in ("running", "waiting", "queued"):
+            stop_job(slug, j.name)
+    for _ in range(20):          # Windows: a process that just stopped may still hold a file for a moment
+        shutil.rmtree(d, ignore_errors=True)
+        if not d.exists():
+            return
+        time.sleep(0.5)
+    raise RuntimeError(f"could not remove everything in {d}; close any file open from it and try again")
+
+
 def update_investigation(slug, **kv):
     d = inv_dir(slug)
     inv = _read(d / "investigation.json", {})

@@ -100,16 +100,19 @@ def api_investigations():
         return _err(e)
 
 
-@workbench_bp.route("/api/inv/<slug>", methods=["GET", "PATCH"])
+@workbench_bp.route("/api/inv/<slug>", methods=["GET", "PATCH", "DELETE"])
 def api_investigation(slug):
     try:
+        if request.method == "DELETE":
+            wb.delete_investigation(slug)
+            return jsonify({"status": "deleted"})
         if request.method == "PATCH":
             d = _json()
             wb.update_investigation(slug, **d)
         return jsonify(wb.get_investigation(slug))
     except FileNotFoundError:
         return _err("no such investigation", 404)
-    except ValueError as e:
+    except (ValueError, RuntimeError) as e:
         return _err(e)
 
 

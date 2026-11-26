@@ -134,6 +134,11 @@ class WebAppTest(unittest.TestCase):
                 self.assertEqual(self.c.get(f"/inv/{inv['slug']}/files/../../settings.json").status_code, 404)
                 self.assertEqual(self.c.get(f"/inv/{inv['slug']}/files/investigation.py").status_code, 404)
                 self.assertEqual(self.c.get("/inv/..%2f..%2fapp/files/x.html").status_code, 404)
+                evil = {"Origin": "https://evil.example"}
+                self.assertEqual(self.c.delete(f"/api/inv/{inv['slug']}", headers=evil).status_code, 403)
+                self.assertEqual(self.c.delete(f"/api/inv/{inv['slug']}").status_code, 200)
+                self.assertFalse((Path(d) / inv["slug"]).exists())
+                self.assertEqual(self.c.get(f"/investigations/{inv['slug']}").status_code, 404)
             finally:
                 wb.INV_ROOT = orig
 

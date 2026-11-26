@@ -79,6 +79,13 @@ const WB = (() => {
     const openLogs = new Set();
     let last = null;
 
+    $('#inv-delete').onclick = async () => {
+      if (!confirm('Delete this investigation? Its jobs are stopped and all its exports, reports and graphs are removed. This cannot be undone.')) return;
+      $('#inv-delete').disabled = true;
+      try { await api(base, {}, 'DELETE'); location.href = '/investigations'; }
+      catch (e) { alert(e.message); $('#inv-delete').disabled = false; }
+    };
+
     // range editor
     $('#edit-range').onclick = e => { e.preventDefault(); $('#range-editor').style.display = ''; };
     $('#r-cancel').onclick = () => { $('#range-editor').style.display = 'none'; };
