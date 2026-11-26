@@ -37,8 +37,9 @@ from pathlib import Path
 from urllib.parse import quote, quote_plus, unquote, unquote_plus, urlparse
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import exportfiles  # noqa: E402  (export folders: part files or export.zip)
 try:  # shared with the Voyager web app (data/settings.json)
-    sys.path.insert(0, str(HERE))
     import voyager_settings as _vs
     SETTINGS = _vs.load()
 except Exception:
@@ -182,29 +183,29 @@ def active_ranges(bins, gap_hours=1):
 
 
 def read_parts(folder, kind):
-    files = sorted(glob.glob(os.path.join(folder, f"part-*.{kind}")))
-    for f in files:
-        if os.path.getsize(f) == 0:
+    """Rows of an export folder: loose part files or export.zip."""
+    for p in exportfiles.parts(folder, kind):
+        if p.size == 0:
             continue
         if kind == "csv":
-            with open(f, encoding="utf-8-sig", newline="") as fh:
+            with p.open(newline="", encoding="utf-8-sig") as fh:
                 yield from csv.DictReader(fh)
         else:
-            with open(f, encoding="utf-8") as fh:
+            with p.open() as fh:
                 for line in fh:
                     if line.strip():
                         yield json.loads(line)
 
 
 def read_parts_ref(folder):
-    """Like read_parts(jsonl) but yields (file, line number, event) so samples can be kept as pointers."""
-    for f in sorted(glob.glob(os.path.join(folder, "part-*.jsonl"))):
-        if os.path.getsize(f) == 0:
+    """Like read_parts(jsonl) but yields (part key, line number, event) so samples can be kept as pointers."""
+    for p in exportfiles.parts(folder, "jsonl"):
+        if p.size == 0:
             continue
-        with open(f, encoding="utf-8") as fh:
+        with p.open() as fh:
             for i, line in enumerate(fh):
                 if line.strip():
-                    yield f, i, json.loads(line)
+                    yield p.key, i, json.loads(line)
 
 
 def stage1_nodes(stage_dir):
@@ -459,8 +460,7 @@ def cmd_build(args):
             pulls[src_id(m["index"], m["sourcetype"])[0]].add(sd["value"])
             raw_metas.append(meta)
     shared = {k for k, v in pulls.items() if len(v) > 1}
-    total_bytes = sum(os.path.getsize(f) for meta in raw_metas
-                      for f in glob.glob(os.path.join(os.path.dirname(meta), "part-*.jsonl")))
+    total_bytes = sum(exportfiles.total_size(os.path.dirname(meta), "jsonl") for meta in raw_metas)
     print(f"Reading {len(raw_metas)} raw source folder(s), {total_bytes / 1e9:.2f} GB of events", file=sys.stderr)
     t_start, done_bytes, src_i = time.time(), 0, 0
     # long tail: entities too rare in a source to ever be drawn or listed get only a compact counter
@@ -525,7 +525,7 @@ def cmd_build(args):
             nid, lbl = src_id(m["index"], m["sourcetype"])
             src_i += 1
             folder = os.path.dirname(meta)
-            sbytes = sum(os.path.getsize(f) for f in glob.glob(os.path.join(folder, "part-*.jsonl")))
+            sbytes = exportfiles.total_size(folder, "jsonl")
             t_src, last_tick = time.time(), time.time()
             print(f"[{src_i}/{len(raw_metas)}] {m['index']} · {m['sourcetype']}  ({sbytes / 1e6:,.0f} MB)",
                   file=sys.stderr, flush=True)
@@ -739,7 +739,7 @@ def cmd_build(args):
     texts = {}
     if not args.sanitize:
         for fpath, lines in wanted.items():
-            with open(fpath, encoding="utf-8") as fh:
+            with exportfiles.open_part(fpath) as fh:
                 for i, line in enumerate(fh):
                     if i in lines:
                         r = json.loads(line).get("_raw")

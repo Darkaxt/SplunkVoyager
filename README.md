@@ -96,6 +96,11 @@ python pivot_graph.py status cases\acct                                     # ra
 python pivot_graph.py build cases\acct cases\other -o combined.html          # several cases in one graph
 ```
 
+Each export run writes one part file per time window while it runs; when every window is done they are packed
+into one compressed `export.zip` in that folder (`--no-pack` keeps the part files). All the tools read either
+form. To pack runs from before this: `python exportfiles.py pack cases data\investigations` (runs that
+aren't complete are left alone).
+
 A value already in a case keeps the time range of its first search; `seed ... --reset-range` searches it again
 with the new range. Each script has `--help`. The command-line tools use the default instance from the same settings
 (`data/settings.json`), or `--base`/`--locale`/`--app`; the environment variables `SPLUNK_BASE`, `SPLUNK_LOCALE`,
@@ -110,6 +115,7 @@ with the new range. Each script has `--help`. The command-line tools use the def
 | `updater.py` | update check, fast-forward and rollback used by `run.py` |
 | `splunk_export.py` | resumable, windowed Splunk export |
 | `network_feed.py` | query builder, window merge and findings between the export and Payload Analyzer |
+| `exportfiles.py` | export folders as part files or `export.zip`; `pack` command |
 | `pivot_graph.py`, `pivot_graph_template.html` | entity mapper |
 | `payload_analyzer/` | Payload Analyzer, unchanged copy (commit in `UPSTREAM_COMMIT`), standard library only |
 | `data/` | your local state: session cookies, settings, investigations. Never commit it |

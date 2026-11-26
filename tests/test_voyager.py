@@ -1,6 +1,8 @@
 """Voyager tests: python -m unittest discover -s tests   (Payload Analyzer has its own in payload_analyzer/tests)."""
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -142,6 +144,42 @@ class WebAppTest(unittest.TestCase):
                 self.assertEqual(self.c.get(f"/investigations/{inv['slug']}").status_code, 404)
             finally:
                 wb.INV_ROOT = orig
+
+
+class ExportFilesTest(unittest.TestCase):
+    def test_pack_read_and_replace(self):
+        import exportfiles
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            for i in (1, 2, 3):
+                (d / f"part-{i:04d}.jsonl").write_text(f'{{"n": {i}, "_raw": "{"x" * 500}"}}\n' * 50)
+            (d / "manifest.json").write_text(json.dumps({"windows": [{"state": "done"}] * 3}))
+            self.assertEqual(exportfiles.pack(d, log=lambda m: None), 3)
+            self.assertEqual(sorted(p.name for p in d.iterdir()), ["export.zip", "manifest.json"])
+            self.assertLess((d / "export.zip").stat().st_size, 3 * 50 * 520 / 5)       # compressed
+            got = [p.name for p in exportfiles.parts(d, "jsonl")]
+            self.assertEqual(got, ["part-0001.jsonl", "part-0002.jsonl", "part-0003.jsonl"])
+            # a window downloaded again after packing (--retry-failed) wins over the packed copy, then is packed in
+            (d / "part-0002.jsonl").write_text('{"n": 22}\n')
+            with [p for p in exportfiles.parts(d, "jsonl") if p.name == "part-0002.jsonl"][0].open() as fh:
+                self.assertEqual(fh.read(), '{"n": 22}\n')
+            exportfiles.pack(d, log=lambda m: None)
+            with exportfiles.open_part(str(d / "export.zip") + "::part-0002.jsonl") as fh:
+                self.assertEqual(fh.read(), '{"n": 22}\n')
+            self.assertEqual(len(exportfiles.parts(d, "jsonl")), 3)
+
+    def test_pack_command_skips_incomplete_runs(self):
+        with tempfile.TemporaryDirectory() as d:
+            for name, state in (("done", "done"), ("busy", "running")):
+                r = Path(d, "case", name)
+                r.mkdir(parents=True)
+                (r / "part-0001.csv").write_text("a,b\n1,2\n")
+                (r / "manifest.json").write_text(json.dumps({"windows": [{"state": state}]}))
+            out = subprocess.run([sys.executable, str(ROOT / "exportfiles.py"), "pack", str(Path(d, "case"))],
+                                 capture_output=True, text=True).stdout
+            self.assertIn("1 run(s) packed, 1 incomplete", out)
+            self.assertTrue(Path(d, "case", "done", "export.zip").is_file())
+            self.assertTrue(Path(d, "case", "busy", "part-0001.csv").is_file())
 
 
 class UpdaterTest(unittest.TestCase):
@@ -317,8 +355,21 @@ class EndToEndTest(unittest.TestCase):
         for v in ("198.51.100.23", "cb.attacker.example"):
             self.run_py("pivot_graph.py", "seed", case, v, "--earliest", "1792454400", "--latest", "1792713600",
                         "--poll", "1")
+        self.assertFalse(list(case.rglob("part-*")))            # finished runs are packed
+        self.assertTrue(list(case.rglob("export.zip")))
         self.run_py("pivot_graph.py", "build", case, "-o", case / "graph.html", "--bin", "1")
         html = (case / "graph.html").read_text(encoding="utf-8")
+        # the same graph from loose part files (unpacked) as from the zips
+        import zipfile
+        loose = Path(self.tmp.name, "case_loose")
+        shutil.copytree(case, loose)
+        for z in loose.rglob("export.zip"):
+            with zipfile.ZipFile(z) as zz:
+                zz.extractall(z.parent)
+            z.unlink()
+        self.run_py("pivot_graph.py", "build", loose, "-o", loose / "graph.html", "--bin", "1")
+        strip = lambda h: re.sub(r'"generated":"[^"]*"|"case":"[^"]*"|"cases":\[[^\]]*\]', "", h)
+        self.assertEqual(strip(html), strip((loose / "graph.html").read_text(encoding="utf-8")))
         self.assertIn("fw:traffic", html)
         self.assertIn("linux_secure", html)
         self.assertIn('"kind":"cooccur"', html)       # the two seeds appear in the same web request

@@ -81,11 +81,12 @@ def _utc(t):
 
 
 def read_export(export_dir):
-    files = sorted(glob.glob(os.path.join(export_dir, "part-*.jsonl")))
+    import exportfiles
+    files = exportfiles.parts(export_dir, "jsonl")
     if not files:
-        raise SystemExit(f"No part-*.jsonl files in {export_dir}")
+        raise SystemExit(f"No part-*.jsonl files (or export.zip) in {export_dir}")
     for f in files:
-        with open(f, encoding="utf-8") as fh:
+        with f.open() as fh:
             for line in fh:
                 if line.strip():
                     r = json.loads(line)

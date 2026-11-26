@@ -796,11 +796,16 @@ def _run(args, sp):
         sys.exit(2)
     if args.merge:
         merge(man, fmt)
-    else:
-        files = [w["file"] for w in sorted(man.windows, key=lambda w: w["earliest"]) if w["file"]]
-        if files:
-            log(f"Results are in {man.dir}\\part-*.{('csv' if fmt == 'csv' else 'jsonl')} "
-                f"({files[0]} = earliest window). Add --merge for a single file.")
+    files = [w["file"] for w in sorted(man.windows, key=lambda w: w["earliest"]) if w["file"]]
+    if files and not getattr(args, "no_pack", False):
+        try:
+            import exportfiles
+            exportfiles.pack(man.dir, log)
+        except Exception as e:      # never lose a finished run over packing: the part files stay
+            log(f"Could not pack the part files ({e}); they stay as they are")
+    if files and not args.merge:
+        log(f"Results are in {man.dir} ({files[0]} = earliest window"
+            f"{', inside export.zip' if (man.dir / 'export.zip').exists() else ''}). Add --merge for a single file.")
 
 
 def retry_or_fail(w, args, why):
@@ -839,12 +844,14 @@ def merge(man, fmt):
     out = man.dir / f"merged.{ext}"
     total, header_written = 0, False
     with open(out, "w", encoding="utf-8", newline="") as fo:
+        import exportfiles
+        avail = {pt.name: pt for pt in exportfiles.parts(man.dir, ext)}
         for w in sorted(man.windows, key=lambda w: w["earliest"]):
-            p = man.dir / (w["file"] or "")
-            if not w["file"] or not p.exists():
+            pt = avail.get(w["file"] or "")
+            if pt is None:
                 continue
             if fmt == "csv":
-                with open(p, encoding="utf-8", newline="") as fi:
+                with pt.open(newline="") as fi:
                     r = csv.reader(fi)
                     hdr = next(r, None)
                     if hdr is None:
@@ -861,7 +868,7 @@ def merge(man, fmt):
                         wr.writerow(row)
                         total += 1
             else:
-                with open(p, encoding="utf-8") as fi:
+                with pt.open() as fi:
                     for line in fi:
                         if line.strip():
                             fo.write(line if line.endswith("\n") else line + "\n")
@@ -952,6 +959,8 @@ def main():
                    help="keep windows that finished with indexer-peer errors instead of rerunning them")
     p.add_argument("--retry-failed", action="store_true", help="give failed windows another set of attempts")
     p.add_argument("--keep-jobs", action="store_true", help="don't delete finished jobs from Splunk")
+    p.add_argument("--no-pack", action="store_true",
+                   help="keep one part file per window instead of packing them into export.zip when the run completes")
     p.add_argument("--merge", action="store_true",
                    help="also write all windows into one merged file at the end (off by default)")
     common(p)
