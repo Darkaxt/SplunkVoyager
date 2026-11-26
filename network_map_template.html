@@ -80,7 +80,7 @@ table.p .v { font-family:Consolas, monospace; word-break:break-all; color:#e9f0f
   <h3>Attack types</h3><div id="cats"></div>
   <h3>Phase reached</h3><div id="phases"></div>
   <h3>Legend</h3>
-  <div class="muted" style="font-size:11.5px">Arrow: attack in progress · comet: new payload · <span style="color:#ff3b5c">■ packets flowing back</span>: extraction payloads active (data requested back) · node colour: level</div>
+  <div class="muted" style="font-size:11.5px">Arrow: attack in progress · comet: new payload · <span style="color:#ff3b5c">■ packets flowing back</span>: extraction payloads active (data requested back) · node colour: level<span id="szleg"></span></div>
 </div>
 <button id="showhud">▤ stats</button>
 <div id="feedbox" class="panel"><button class="hide" data-hide="feedbox">–</button><h3 style="margin-top:0">Live feed</h3><div id="feed"></div></div>
@@ -132,16 +132,30 @@ function buildArcs() {
     let a = m.get(k);
     if (!a) m.set(k, a = {k, s: srcKey(e), t: tgtKey(e), iv: [], leak: [], ev: []});
     const end = Math.max(e.t, Date.parse((u.last || '').replace(' ', 'T') + 'Z') / 1000 || e.t);
-    a.iv.push([e.t, end]); a.ev.push(e);
+    a.iv.push([e.t, end]); a.ev.push(e); a.sz = a.sz || [];
+    if (e.bi || e.bo) a.sz.push([e.t, end + linger, e.bi || 0, e.phase === 'extraction' ? e.bo || 0 : 0]);  // leak: extraction responses
     if (e.phase === 'extraction') a.leak.push([e.t, end]);
   }
   const merge = ivs => { ivs.sort((x, y) => x[0] - y[0]); const out = [];
     for (const [a, b] of ivs) { const L = out[out.length - 1]; if (L && a <= L[1] + linger) L[1] = Math.max(L[1], b); else out.push([a, b]); }
     return out.map(([a, b]) => [a, b + linger]); };
-  m.forEach(a => { a.iv = merge(a.iv); a.leak = merge(a.leak); a.anim = {on: false, grow: 1, fade: 0, leakOn: false, leakFade: 0}; });
+  // bytes of the payloads in progress, as a step function: [time, request bytes, response bytes]
+  const steps = sz => { const pts = []; sz.forEach(([a, b, i, o]) => { pts.push([a, i, o], [b, -i, -o]); });
+    pts.sort((x, y) => x[0] - y[0]); let bi = 0, bo = 0; return pts.map(([t, i, o]) => [t, bi += i, bo += o]); };
+  m.forEach(a => { a.iv = merge(a.iv); a.leak = merge(a.leak); a.bytes = steps(a.sz || []); delete a.sz;
+    a.anim = {on: false, grow: 1, fade: 0, leakOn: false, leakFade: 0}; });
   ARCS = m;
 }
 const inIv = (ivs, t) => ivs.some(([a, b]) => t >= a && t <= b);
+function bytesAt(a, t) {
+  const s = a.bytes; let lo = 0, hi = s.length - 1, r = null;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (s[mid][0] <= t) { r = s[mid]; lo = mid + 1; } else hi = mid - 1; }
+  return r ? [Math.max(0, r[1]), Math.max(0, r[2])] : [0, 0];
+}
+const SZ = D.sizes || {};
+const fmtB = b => b == null ? '-' : b < 1024 ? Math.round(b) + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : b < 1073741824 ? (b / 1048576).toFixed(1) + ' MB' : (b / 1073741824).toFixed(2) + ' GB';
+// width from bytes, log scale: 1 KB ~ 2.5 px, 100 KB ~ 6 px, 10 MB+ ~ 9 px
+const bw = (b, base, k, max) => base + Math.min(max, Math.max(0, Math.log10(1 + b / 100) * k));
 
 // ------------------------------------------------------------------ layout (compact, measured labels)
 const cv = $('#cv'), ctx = cv.getContext('2d');
@@ -261,7 +275,8 @@ function frame(now) {
     const vis = an.on ? an.grow : an.fade;
     if (vis > 0) {
       const reach = an.on ? an.grow : 1, alpha = an.on ? 1 : an.fade;
-      const st = ST.A.get(a.k), w = 1.6 + Math.min(5, Math.log2(1 + (st ? st.n.size : 1)) * 1.1);
+      const st = ST.A.get(a.k), [bin] = bytesAt(a, cur);
+      const w = SZ.req && a.bytes.length ? bw(bin, 1.4, 1.75, 7.6) : 1.6 + Math.min(5, Math.log2(1 + (st ? st.n.size : 1)) * 1.1);
       ctx.globalAlpha = alpha * .3; ctx.strokeStyle = col; ctx.lineWidth = w * 3.4; ctx.shadowColor = col; ctx.shadowBlur = 18; strokeArc(g, 0, reach);
       ctx.shadowBlur = 8; ctx.globalAlpha = alpha; ctx.lineWidth = w; strokeArc(g, 0, reach);
       ctx.setLineDash([3, 14]); ctx.lineDashOffset = -now / 28; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1.2, w * .45);
@@ -281,11 +296,16 @@ function frame(now) {
     if (!leakOn) an.leakFade = Math.max(0, an.leakFade - dt / 1.6);
     const la = leakOn ? Math.min(1, an.grow * 1.2) : an.leakFade;
     if (la > 0) {
-      ctx.globalAlpha = la * .3; ctx.strokeStyle = LEAK; ctx.lineWidth = 7; ctx.shadowColor = LEAK; ctx.shadowBlur = 16; strokeArc(g, 0, 1, 9); ctx.shadowBlur = 0;
-      for (let i = 0; i < 10; i++) {
-        const k = 1 - (((now / 1600) + i / 10) % 1);
-        let [px, py] = qpt(g, k); const [dx, dy] = qtan(g, k), n = Math.hypot(dx, dy) || 1; px += -dy / n * 9; py += dx / n * 9;
-        const sz = 2.2 + 1.6 * Math.sin((k + i) * 7) ** 2;
+      // packet size and lane width follow the response bytes of the extraction payloads in progress
+      const bout = SZ.resp && a.bytes.length ? bytesAt(a, cur)[1] : null;
+      if (bout != null && (bout > 0 || leakOn)) an.bo = bout;
+      const pk = bout == null ? 2.2 : 1 + Math.min(6.5, Math.log10(1 + (an.bo || 0) / 1000) ** 1.6 * 1.3),  // 1 KB ~ 1.2, 10 KB ~ 2.5, 250 KB ~ 6, 1 MB+ ~ 7.5
+      off = 7 + pk * 1.2, npk = bout == null ? 10 : Math.round(8 + pk * 1.5);
+      ctx.globalAlpha = la * .3; ctx.strokeStyle = LEAK; ctx.lineWidth = 3 + pk * 2; ctx.shadowColor = LEAK; ctx.shadowBlur = 16; strokeArc(g, 0, 1, off); ctx.shadowBlur = 0;
+      for (let i = 0; i < npk; i++) {
+        const k = 1 - (((now / 1600) + i / npk) % 1);
+        let [px, py] = qpt(g, k); const [dx, dy] = qtan(g, k), n = Math.hypot(dx, dy) || 1; px += -dy / n * off; py += dx / n * off;
+        const sz = pk + (bout == null ? 1.6 : pk * .45) * Math.sin((k + i) * 7) ** 2;
         ctx.globalAlpha = la * (.55 + .45 * Math.sin(k * Math.PI)); ctx.fillStyle = LEAK; ctx.shadowColor = LEAK; ctx.shadowBlur = 10;
         ctx.fillRect(px - sz, py - sz, sz * 2, sz * 2); ctx.shadowBlur = 0;
       }
@@ -463,6 +483,13 @@ cv.addEventListener('click', e => {
 });
 cv.addEventListener('dblclick', e => { const r = cv.getBoundingClientRect(), h = hit(e.clientX - r.left, e.clientY - r.top);
   if (h && h.type === 'site') { expanded.add(h.id); rebuild(); } });
+function sizeTxt(u) {
+  const out = [];
+  if (u.req_avg != null) out.push('req ' + fmtB(u.req_avg));
+  if (u.resp_avg != null) out.push('resp ' + fmtB(u.resp_avg) + (u.resp_max > u.resp_avg * 1.05 ? ' (max ' + fmtB(u.resp_max) + ')' : '') +
+    (u.resp_ratio != null ? ` · ${u.resp_ratio}× path median` : ''));
+  return out.length ? '<br>' + out.join('<br>') : '';
+}
 function select(s) {
   sel = s;
   const evs = EV.filter(e => s.type === 'src' ? srcKey(e) === s.id : s.type === 'site' ? e.site === s.id :
@@ -473,8 +500,8 @@ function select(s) {
   else if (s.type === 'path') { title = s.site + s.path; kind = 'Path'; lvl = pathLv.get(s.site + '\t' + s.path) || 0; }
   else { const [site, path] = s.t.split('\t'); title = `${s.s} → ${site}${path || ''}`; kind = 'Source → target';
     const p = path != null ? pathPairLv.get(s.s + '\t' + site + '\t' + path) : pairLv.get(s.s + '\t' + site); lvl = p ? p.level : 0; reasons = p ? p.reasons : []; }
-  const us = new Map(); let req = 0; const st = new Set(), ph = {}, cats = new Map(), srcs = new Set(), tg = new Set();
-  evs.forEach(e => { const u = units.get(e.u) || {}; if (!us.has(e.u)) us.set(e.u, {u, t: e.t, srcs: new Set(), tg: new Set(), n: 0});
+  const us = new Map(); let req = 0, bi = 0, bo = 0; const st = new Set(), ph = {}, cats = new Map(), srcs = new Set(), tg = new Set();
+  evs.forEach(e => { bi += e.bi || 0; bo += e.bo || 0; const u = units.get(e.u) || {}; if (!us.has(e.u)) us.set(e.u, {u, t: e.t, srcs: new Set(), tg: new Set(), n: 0});
     const x = us.get(e.u); x.srcs.add(e.src); x.tg.add(e.site + (e.path || '')); x.n += e.n; x.t = Math.min(x.t, e.t);
     req += e.n; (u.statuses || []).forEach(v => st.add(v)); ph[e.phase] = Math.min(ph[e.phase] ?? Infinity, e.t);
     cats.set(e.cat, (cats.get(e.cat) || 0) + 1); srcs.add(e.src); tg.add(e.site + (e.path || '')); });
@@ -484,6 +511,7 @@ function select(s) {
     <dl><dt>Level</dt><dd><span class="lv lv${lvl}">${esc(LVN[lvl])}</span></dd>
     ${reasons.length ? `<dt>Why</dt><dd>${reasons.map(esc).join('<br>')}</dd>` : ''}
     <dt>Payloads</dt><dd>${us.size} distinct, ${req.toLocaleString()} requests</dd>
+    ${SZ.req || SZ.resp ? `<dt>Bytes</dt><dd>${SZ.req ? 'requests ' + fmtB(bi) : ''}${SZ.req && SZ.resp ? ' · ' : ''}${SZ.resp ? 'responses ' + fmtB(bo) : ''}<br><span class="muted">each payload's requests × its average size</span></dd>` : ''}
     <dt>Active</dt><dd>${evs.length ? fmt(evs[0].t) + ' → ' + fmt(evs[evs.length - 1].t) : '-'}</dd>
     ${s.type !== 'src' && s.type !== 'arc' ? `<dt>Sources</dt><dd>${srcs.size}</dd>` : ''}${s.type === 'src' ? `<dt>Targets</dt><dd>${tg.size}</dd>` : ''}
     <dt>Phases first seen</dt><dd>${Object.entries(ph).sort((a, b) => a[1] - b[1]).map(([p, t]) => `<span class="ph" style="background:${PHCOL[PH[p] ?? 0]}"></span>${esc(p)} ${fmt(t).slice(5)}`).join('<br>') || '-'}</dd>
@@ -494,7 +522,7 @@ function select(s) {
       [...pts.entries()].sort((a, b) => b[1].length - a[1].length).map(([k, xs]) => { const P = D.points[k] || {};
         return `<tr><td class="v">${esc(k)}</td><td>${xs.length}</td><td>${P.in_order ? 'yes' : 'no'}</td><td>${P.trend == null ? (xs.length < D.series_min ? `< ${D.series_min} payloads` : '-') : (P.trend > 0 ? 'rising' : 'not rising') + ' (' + P.trend + ')'}</td></tr>`; }).join('') + '</table>';
   h += `<h3>Payloads, in order</h3><table class="p"><tr><th>First seen</th><th>Phase</th><th>Payload</th></tr>` +
-    [...us.values()].sort((a, b) => a.t - b.t).slice(0, 300).map(x => `<tr><td class="muted" style="white-space:nowrap">${fmt(x.t).slice(5)}<br>${x.n} req · ${esc((x.u.statuses || []).join(','))}</td>
+    [...us.values()].sort((a, b) => a.t - b.t).slice(0, 300).map(x => `<tr><td class="muted" style="white-space:nowrap">${fmt(x.t).slice(5)}<br>${x.n} req · ${esc((x.u.statuses || []).join(','))}${sizeTxt(x.u)}</td>
       <td><span class="ph" style="background:${PHCOL[PH[x.u.phase] ?? 0]}"></span>${esc(x.u.phase)}<br><span style="color:${catCol(x.u.cat)}">${esc(catLbl(x.u.cat))}</span></td>
       <td>${D.sanitized ? '' : `<div class="v">${esc(x.u.value)}</div><div class="muted">${esc([...x.tg][0])}${x.u.param ? ' ? ' + esc(x.u.param) : ''} · ${esc([...x.srcs].join(', '))}</div>`}</td></tr>`).join('') + '</table>';
   if (us.size > 300) h += `<div class="muted">first 300 of ${us.size} shown</div>`;
@@ -507,6 +535,7 @@ $('#about').innerHTML = '<h3 style="margin-top:0">Levels</h3>' + D.levels.map((l
   `<p class="muted">Computed per source + site and per source + path from Payload Analyzer's categories and phases. Each distinct payload counts once at its first-seen time; an attack is drawn as in progress from a payload's first to its last time seen. Packets flowing back mark active extraction payloads: data was requested back, which does not establish that it was returned.</p>
    <p class="muted">Sites: click for details, double-click or + to expand into paths; "paths" expands all. Scroll the map when it is taller than the window.</p>`;
 
+if (SZ.req || SZ.resp) $('#szleg').textContent = ' · ' + [SZ.req && 'arrow width: request bytes', SZ.resp && 'packet size: response bytes of the extraction payloads'].filter(Boolean).join(', ') + ', for the payloads in progress';
 if (!EV.length) document.body.insertAdjacentHTML('beforeend', '<div style="position:absolute;top:45%;width:100%;text-align:center;color:#7f8db0">No attack payloads in this analysis.</div>');
 buildArcs(); layout(); drawTimeline();
 requestAnimationFrame(frame);

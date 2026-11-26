@@ -21,12 +21,17 @@ T0 = int(datetime(2026, 10, 20, tzinfo=timezone.utc).timestamp())
 EV = []   # t, index, sourcetype, host, raw, web (dict for web events)
 
 
-def web(t, ip, site, path, query, status=200, action="allowed"):
+SIZES = random.Random(7)   # own generator: sizes don't change the traffic drawn from `random`
+
+
+def web(t, ip, site, path, query, status=200, action="allowed", resp=None):
     uri = path + ("?" + query if query else "")
+    cs, sc = len(uri) + 350, resp or SIZES.randint(3000, 6000)
     ts = datetime.fromtimestamp(t, timezone.utc).strftime("%d/%b/%Y:%H:%M:%S +0000")
     raw = f'{ip} - - [{ts}] "GET {uri} HTTP/1.1" {status} 512 "-" "Mozilla/5.0" site={site}'
     EV.append({"t": t, "index": "web", "sourcetype": "access_combined", "host": "web-01", "raw": raw,
-               "web": {"site": site, "uri_path": path, "uri_query": query, "src": ip, "status": str(status), "action": action}})
+               "web": {"site": site, "uri_path": path, "uri_query": query, "src": ip, "status": str(status), "action": action,
+                       "cs_bytes": cs, "sc_bytes": sc}})
 
 
 def other(t, index, st, host, raw):
@@ -57,7 +62,7 @@ t = T0 + 86400 + 4 * 3600 + 120
 for q in ["q=%27%20UNION%20SELECT%20email%2Cpassword_hash%20FROM%20customers--",
           "q=%27%20AND%20extractvalue(1%2Cconcat(0x7e%2C(SELECT%20password_hash%20FROM%20customers%20LIMIT%201)))--",
           "q=%27%20UNION%20SELECT%20card_number%2Cexpiry%2Ccvv%20FROM%20payments%20WHERE%20id%3E0--"]:
-    web(t, A1, "shop.example", "/search", q, 200)
+    web(t, A1, "shop.example", "/search", q, 200, resp=SIZES.randint(180000, 420000))
     t += 300
 # a scanner that only probes, both sites
 A3 = "192.0.2.200"
@@ -109,13 +114,20 @@ def run(search, e, l):
                 r["count"] += 1
                 r["et"], r["lt"] = min(r["et"], ev["t"]), max(r["lt"], ev["t"])
                 r["src"].add(w["src"]); r["status"].add(w["status"]); r["action"].add(w["action"])
+                if "sum(req_bytes)" in search:
+                    r["req_bytes"] = r.get("req_bytes", 0) + w["cs_bytes"]; r["req_n"] = r.get("req_n", 0) + 1
+                if "sum(resp_bytes)" in search:
+                    r["resp_bytes"] = r.get("resp_bytes", 0) + w["sc_bytes"]; r["resp_n"] = r.get("resp_n", 0) + 1
+                    r["resp_max"] = max(r.get("resp_max", 0), w["sc_bytes"])
         rows = []
         for r in g.values():
             rows.append({**r, "count": str(r["count"]), "et": f"{r['et']:.3f}", "lt": f"{r['lt']:.3f}",
                          "src": sorted(r["src"]) if len(r["src"]) > 1 else next(iter(r["src"])),
                          "status": sorted(r["status"]) if len(r["status"]) > 1 else next(iter(r["status"])),
-                         "action": next(iter(r["action"]))})
-        return rows, ["site", "uri_path", "uri_query", "count", "et", "lt", "src", "status", "action"]
+                         "action": next(iter(r["action"])),
+                         **{k: str(r[k]) for k in ("req_bytes", "req_n", "resp_bytes", "resp_n", "resp_max") if k in r}})
+        return rows, ["site", "uri_path", "uri_query", "count", "et", "lt", "src", "status", "action",
+                      "req_bytes", "req_n", "resp_bytes", "resp_n", "resp_max"]
     qs = quoted(search)
     if "stats count by index sourcetype _time" in search:    # entity mapper, stage 1
         iocs = [q.lower() for q in qs]

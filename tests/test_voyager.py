@@ -34,6 +34,14 @@ class NetworkFeedTest(unittest.TestCase):
             network_feed.build_query("index=web", "", {"site": "host' | delete"})
         with self.assertRaises(ValueError):
             network_feed.build_query("   ", "", {})
+        q = network_feed.build_query("index=web")
+        self.assertIn("req_bytes=coalesce(tonumber('cs_bytes'), tonumber('cs_B'), tonumber('bytes_out'))", q)
+        self.assertIn("sum(resp_bytes) as resp_bytes count(resp_bytes) as resp_n max(resp_bytes) as resp_max", q)
+        q = network_feed.build_query("index=web", "", {"req_bytes": "-", "resp_bytes": "bytes"})
+        self.assertNotIn("req_bytes", q)
+        self.assertIn("resp_bytes=tonumber('bytes')", q)
+        with self.assertRaises(ValueError):
+            network_feed.build_query("index=web", "", {"resp_bytes": "sc_bytes, x' | delete"})
 
     def test_merge_combines_windows_and_writes_utc(self):
         with tempfile.TemporaryDirectory() as d:
@@ -275,6 +283,18 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(lv[("192.0.2.200", "shop.example")], "probing")        # the scanner
         self.assertEqual(lv[("198.51.100.23", "app.example")], "extraction")    # 2 payloads: too few for "in order"
         self.assertIn("sustained", (d / "attack_map.html").read_text(encoding="utf-8"))
+        # sizes: from the export through requests.jsonl to each payload (by Payload Analyzer's line references)
+        self.assertEqual(m["sizes"], {"req": True, "resp": True})
+        us = {u["id"]: u for u in m["units"]}
+        ext = [u for u in us.values() if u["site"] == "shop.example" and u["phase"] == "extraction" and u["statuses"] == ["200"]]
+        probe = [u for u in us.values() if u["path"] == "/item"]
+        self.assertTrue(ext and probe)
+        self.assertTrue(all(u["resp_avg"] > 150000 and u["resp_ratio"] > 20 for u in ext), ext)
+        self.assertTrue(all(3000 <= u["resp_avg"] <= 6000 and u["req_avg"] > 350 for u in probe), probe)
+        self.assertTrue(all("bo" in e and "bi" in e for e in m["events"]))
+        pair = next(p for p in m["pairs"] if (p["src"], p["site"]) == ("203.0.113.7", "shop.example"))
+        self.assertGreater(pair["bo"], 3 * 150000)
+        self.assertEqual(network_map.build(d / "analysis.json", requests=False)["sizes"], {"req": False, "resp": False})
         s = json.dumps(network_map.build(d / "analysis.json", sanitize=True))
         for leak in ("203.0.113", "198.51.100", "shop.example", "/search", "information_schema"):
             self.assertNotIn(leak, s)

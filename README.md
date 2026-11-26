@@ -61,9 +61,15 @@ also asks Windows not to go to sleep (closing the lid still does).
 Voyager appends the aggregation Payload Analyzer reads:
 
 ```
+| eval req_bytes=coalesce(tonumber('cs_bytes'), tonumber('cs_B'), tonumber('bytes_out')),
+       resp_bytes=coalesce(tonumber('sc_bytes'), tonumber('sc_B'), tonumber('bytes_in'))
 | stats count min(_time) as et max(_time) as lt values(src) as src values(status) as status values(action) as action
-  by site uri_path uri_query
+  sum(req_bytes) as req_bytes count(req_bytes) as req_n sum(resp_bytes) as resp_bytes count(resp_bytes) as resp_n
+  max(resp_bytes) as resp_max by site uri_path uri_query
 ```
+
+The sizes are optional: the first size field present is used, and data without any of them gives a run without
+sizes. Set other size fields under *request size* / *response size*, or `-` to leave sizes out.
 
 If your fields are named differently, map them under *Field extraction and field names*; if they are not
 extracted at all, add `rex`/`eval` lines there. *Show the SPL that will run* displays the exact query.
@@ -79,7 +85,13 @@ arcs coloured by the furthest phase reached (or by attack type), an hourly view 
 live feed, and per source / site / path / arc the payloads in order. Sites expand into their paths (click the +
 or the *paths* switch). Levels (probing, enumeration, extraction, sustained) are rule-based, with the rules shown
 in the page; they describe what the payloads show, not whether an attack succeeded.
-`python network_map.py analysis.json -o attack_map.html [--sanitize]` builds it by hand.
+When the export has sizes, arrow width follows the request bytes of the payloads in progress, and the packets
+flowing back follow the response bytes of the extraction payloads in progress. The details show each payload's
+average request and response size and its response against the median response of the same site + path. Sizes
+come from the exact request groups of each payload; per-event bytes are its requests x its average size. Runs
+exported before this change have no sizes: run the analysis again from Splunk to get them (*Re-analyse* reuses
+the old export).
+`python network_map.py analysis.json -o attack_map.html [--sanitize] [--requests requests.jsonl]` builds it by hand.
 
 **After updating Payload Analyzer**, *Re-analyse* on a network run runs the analysis, report and findings
 again on the export it already has; Splunk isn't queried.

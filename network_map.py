@@ -15,7 +15,15 @@ payloads show, never whether an attack succeeded:
                   come in order (probing before enumeration before extraction), or 5+ distinct payloads whose
                   complexity rises over time
 Pairs and levels are computed per source + site and per source + site + path (sites can be expanded).
+
+Sizes: when requests.jsonl carries request/response sizes (req_bytes / resp_bytes from the export), each payload
+gets the sizes of the exact request groups it came from (Payload Analyzer's line references), and each event an
+estimate (its requests x the payload's average). The map scales arrows by request bytes and the packets flowing
+back by response bytes; a payload's response is also compared with the median response of all requests to the
+same site + path.
 """
+import hashlib
+import statistics
 import argparse
 import json
 import math
@@ -83,10 +91,76 @@ def level_of(phases, points_by_ip):
     return lvl, reasons
 
 
-def build(analysis_path, title=None, top_sources=80, sanitize=False):
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for b in iter(lambda: fh.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def find_requests(analysis_path, report, requests=None):
+    """requests.jsonl the analysis was made from: given, beside the analysis, or the recorded source (sha checked)."""
+    meta = report.get("meta") or {}
+    cands = [Path(requests)] if requests else [Path(analysis_path).with_name("requests.jsonl"), Path(meta.get("source") or "")]
+    want = meta.get("source_sha256")
+    for c in cands:
+        if c.name and c.is_file() and c.suffix == ".jsonl":
+            if want and _sha256(c) != want:
+                print(f"{c}: not the file this analysis was made from (sha256 differs); sizes left out", file=sys.stderr)
+                continue
+            return c
+    return None
+
+
+def load_sizes(report, requests_path):
+    """{short unit id: size totals}, {(site, path): median response per request}, which sizes exist."""
+    rb = load_builder()
+    want = defaultdict(set)
+    for u in report.get("units") or []:
+        if (u.get("effective_category") or (u.get("analysis") or {}).get("category")) in (None, "not_attack"):
+            continue
+        for o in u.get("occurrences") or []:
+            if o.get("source_jsonl_line"):
+                want[int(o["source_jsonl_line"])].add(rb.short(u.get("unit_id")))
+    rows, base, have = {}, defaultdict(list), {"req": False, "resp": False}
+    with open(requests_path, encoding="utf-8") as fh:
+        for i, line in enumerate(fh, 1):
+            if '_bytes"' not in line:
+                continue
+            r = json.loads(line)
+            if r.get("resp_n"):
+                have["resp"] = True
+                base[(r.get("site") or "", r.get("uri_path") or "")].append(r["resp_bytes"] / r["resp_n"])
+            if r.get("req_n"):
+                have["req"] = True
+            if i in want:
+                rows[i] = r
+    per = defaultdict(lambda: {"req_b": 0, "req_n": 0, "resp_b": 0, "resp_n": 0, "resp_max": None})
+    for line, uids in want.items():
+        r = rows.get(line)
+        if not r:
+            continue
+        for uid in uids:
+            x = per[uid]
+            x["req_b"] += r.get("req_bytes") or 0
+            x["req_n"] += r.get("req_n") or 0
+            x["resp_b"] += r.get("resp_bytes") or 0
+            x["resp_n"] += r.get("resp_n") or 0
+            if r.get("resp_max") is not None:
+                x["resp_max"] = max(x["resp_max"] or 0, r["resp_max"])
+    medians = {k: statistics.median(v) for k, v in base.items()}
+    return dict(per), medians, have
+
+
+def build(analysis_path, title=None, top_sources=80, sanitize=False, requests=None):
     rb = load_builder()
     report = json.loads(Path(analysis_path).read_text(encoding="utf-8"))
     m = rb.build_model(report)
+    sizes, medians, have = {}, {}, {"req": False, "resp": False}
+    rq = find_requests(analysis_path, report, requests) if requests is not False else None
+    if rq:
+        sizes, medians, have = load_sizes(report, rq)
     cats = {c[0]: {"label": c[1], "color": c[2]} for c in m.get("cats") or []}
 
     units = {}
@@ -98,6 +172,17 @@ def build(analysis_path, title=None, top_sources=80, sanitize=False):
             "last": u.get("last"), "count": u.get("count") or 0, "statuses": u.get("statuses") or [],
             "ips": u.get("ips") or [], "cx": complexity(u),
         }
+        z = sizes.get(u["id"])
+        if z:
+            x = units[u["id"]]
+            if z["req_n"]:
+                x["req_avg"] = round(z["req_b"] / z["req_n"])
+            if z["resp_n"]:
+                x["resp_avg"] = round(z["resp_b"] / z["resp_n"])
+                x["resp_max"] = z["resp_max"]
+                med = medians.get((x["site"], x["path"]))
+                if med:
+                    x["resp_ratio"] = round(x["resp_avg"] / med, 2)
 
     # events: minute, cat, rule, target, requests, sources, phase, [[unit, n]...]
     events = []
@@ -107,13 +192,19 @@ def build(analysis_path, title=None, top_sources=80, sanitize=False):
         site, path = (target[:slash], target[slash:]) if slash >= 0 else (target, "")
         for uid, k in members or [[None, n]]:
             for ip in [s.strip() for s in str(src).split(",") if s.strip()] or ["unknown"]:
-                events.append({"t": int(t), "cat": cat, "phase": phase, "site": site, "path": path, "src": ip,
-                               "u": uid, "n": int(k)})
+                e = {"t": int(t), "cat": cat, "phase": phase, "site": site, "path": path, "src": ip,
+                     "u": uid, "n": int(k)}
+                x = units.get(uid) or {}
+                if "req_avg" in x:
+                    e["bi"] = x["req_avg"] * e["n"]
+                if "resp_avg" in x:
+                    e["bo"] = x["resp_avg"] * e["n"]
+                events.append(e)
     events.sort(key=lambda e: (e["t"], e["src"], e["site"]))
 
     # per pair and per injection point
     pairs = defaultdict(lambda: {"payloads": set(), "requests": 0, "first": None, "last": None, "cats": defaultdict(int),
-                                 "phases": {}, "statuses": set(), "points": defaultdict(list)})
+                                 "phases": {}, "statuses": set(), "points": defaultdict(list), "bi": 0, "bo": 0})
     points = defaultdict(lambda: {"payloads": set(), "phases": {}, "cx": [], "requests": 0, "sources": set()})
     for e in events:
         u = units.get(e["u"]) or {}
@@ -121,6 +212,8 @@ def build(analysis_path, title=None, top_sources=80, sanitize=False):
         p = pairs[(e["src"], e["site"])]
         p["payloads"].add(e["u"])
         p["requests"] += e["n"]
+        p["bi"] += e.get("bi", 0)
+        p["bo"] += e.get("bo", 0)
         p["first"] = e["t"] if p["first"] is None else min(p["first"], e["t"])
         p["last"] = e["t"] if p["last"] is None else max(p["last"], e["t"])
         p["cats"][e["cat"]] += 1
@@ -144,13 +237,15 @@ def build(analysis_path, title=None, top_sources=80, sanitize=False):
 
     pair_out = _pairs_out(pairs)
     pairs_path = defaultdict(lambda: {"payloads": set(), "requests": 0, "first": None, "last": None, "cats": defaultdict(int),
-                                      "phases": {}, "statuses": set(), "points": defaultdict(list)})
+                                      "phases": {}, "statuses": set(), "points": defaultdict(list), "bi": 0, "bo": 0})
     for e in events:
         u = units.get(e["u"]) or {}
         pkey = f"{e['site']}{e['path']} ? {u.get('param') or '-'}"
         p = pairs_path[(e["src"], e["site"] + "\t" + e["path"])]
         p["payloads"].add(e["u"])
         p["requests"] += e["n"]
+        p["bi"] += e.get("bi", 0)
+        p["bo"] += e.get("bo", 0)
         p["first"] = e["t"] if p["first"] is None else min(p["first"], e["t"])
         p["last"] = e["t"] if p["last"] is None else max(p["last"], e["t"])
         p["cats"][e["cat"]] += 1
@@ -165,7 +260,9 @@ def build(analysis_path, title=None, top_sources=80, sanitize=False):
         path_level[(p["site"], p["path"])] = max(path_level[(p["site"], p["path"])], p["level"])
 
     # sources and sites
-    return _finish(events, units, cats, pair_out, path_pairs, path_level, point_out, title, top_sources, sanitize)
+    data = _finish(events, units, cats, pair_out, path_pairs, path_level, point_out, title, top_sources, sanitize)
+    data["sizes"] = have
+    return data
 
 
 def _pairs_out(pairs):
@@ -185,7 +282,7 @@ def _pairs_out(pairs):
         pair_out.append({"src": src, "site": site, "payloads": len(p["payloads"]), "requests": p["requests"],
                          "first": p["first"], "last": p["last"], "cats": dict(p["cats"]), "phases": p["phases"],
                          "statuses": sorted(p["statuses"]), "level": lvl, "reasons": why,
-                         "points": sorted(own)})
+                         "points": sorted(own), "bi": p["bi"], "bo": p["bo"]})
     return pair_out
 
 
@@ -266,14 +363,17 @@ def main():
     ap.add_argument("--title")
     ap.add_argument("--top-sources", type=int, default=80, help="sources drawn individually (default 80)")
     ap.add_argument("--sanitize", action="store_true", help="opaque labels, no payload texts")
+    ap.add_argument("--requests", help="requests.jsonl the analysis was made from, for sizes "
+                                       "(default: beside the analysis, or its recorded source)")
     a = ap.parse_args()
-    data = build(a.analysis, a.title, a.top_sources, a.sanitize)
+    data = build(a.analysis, a.title, a.top_sources, a.sanitize, a.requests)
     render(data, a.output)
     lv = defaultdict(int)
     for p in data["pairs"]:
         lv[LEVELS[p["level"]][0]] += 1
     print(f"{len(data['sources'])} sources, {len(data['sites'])} sites, {len(data['units'])} attack payloads; "
-          f"source/site pairs by level: {dict(lv)} -> {a.output}", file=sys.stderr)
+          f"source/site pairs by level: {dict(lv)}; sizes: "
+          f"{', '.join(k for k, v in data['sizes'].items() if v) or 'none'} -> {a.output}", file=sys.stderr)
 
 
 if __name__ == "__main__":

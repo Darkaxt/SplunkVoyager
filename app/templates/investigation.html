@@ -49,7 +49,11 @@
           <div><label class="f">status</label><input type="text" class="na-f" data-k="status" placeholder="status"></div>
           <div><label class="f">action</label><input type="text" class="na-f" data-k="action" placeholder="action"></div>
         </div>
-        <div class="hint">The field in your data that holds each value; empty = same name.</div>
+        <div class="row">
+          <div><label class="f">request size</label><input type="text" class="na-f" data-k="req_bytes" placeholder="cs_bytes,cs_B,bytes_out"></div>
+          <div><label class="f">response size</label><input type="text" class="na-f" data-k="resp_bytes" placeholder="sc_bytes,sc_B,bytes_in"></div>
+        </div>
+        <div class="hint">The field in your data that holds each value; empty = same name. Sizes: comma-separated fields, the first one present is used; empty = the defaults shown, "-" = no sizes. Sizes are optional and only feed the attack map.</div>
       </details>
       <div class="row">
         <div><label class="f">Earliest</label><input type="text" id="na-earliest" placeholder="{{ inv.earliest }}"></div>

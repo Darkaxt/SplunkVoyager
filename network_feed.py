@@ -23,7 +23,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 FIELDS = ("site", "uri_path", "uri_query", "src", "status", "action")
+# Request and response sizes, first field present wins. Names vary by source: IIS/W3C use cs_bytes (client to
+# server, the request) and sc_bytes (server to client, the response); some feeds use cs_B/sc_B or bytes_out/bytes_in.
+SIZE_FIELDS = {"req_bytes": "cs_bytes,cs_B,bytes_out", "resp_bytes": "sc_bytes,sc_B,bytes_in"}
+SIZE_SUMS = ("req_bytes", "req_n", "resp_bytes", "resp_n")
 FIELD_RE = re.compile(r"^[A-Za-z_][\w.:\-{}]*$")
+
+
+def _size_eval(name, spec):
+    names = [n.strip() for n in str(spec or "").split(",") if n.strip()]
+    for n in names:
+        if not FIELD_RE.match(n):
+            raise ValueError(f"field name for {name} is not a plain Splunk field name: {n!r}")
+    if not names:
+        return None
+    if len(names) == 1:
+        return f"{name}=tonumber('{names[0]}')"
+    return f"{name}=coalesce(" + ", ".join(f"tonumber('{n}')" for n in names) + ")"
 
 
 def build_query(base, extract="", fields=None):
@@ -31,8 +47,11 @@ def build_query(base, extract="", fields=None):
 
     fields maps Payload Analyzer's names (site, uri_path, uri_query, src, status, action) to the field names in
     your data; leave a name as is when the data already uses it. Nothing is assumed to be parsed: put rex/eval
-    lines in `extract` to derive the fields first.
+    lines in `extract` to derive the fields first. req_bytes / resp_bytes take a comma-separated list of size
+    fields (first present wins; empty = the defaults, "-" = no sizes); missing size fields only leave the sizes out.
     """
+    sizes = {k: str((fields or {}).get(k) or "").strip() or v for k, v in SIZE_FIELDS.items()}
+    sizes = {k: "" if v == "-" else v for k, v in sizes.items()}
     base = (base or "").strip()
     if not base:
         raise ValueError("base search is empty")
@@ -48,13 +67,20 @@ def build_query(base, extract="", fields=None):
             raise ValueError(f"field name for {k} is not a plain Splunk field name: {src!r}")
         if src != k:
             evals.append(f"{k}='{src}'")
+    size_evals = [e for e in (_size_eval(k, v) for k, v in sizes.items()) if e]
+    evals += size_evals
     if evals:
         lines.append("| eval " + ", ".join(evals))
+    agg = ("| stats count min(_time) as et max(_time) as lt values(src) as src values(status) as status "
+           "values(action) as action")
+    if any(e.startswith("req_bytes=") for e in size_evals):
+        agg += " sum(req_bytes) as req_bytes count(req_bytes) as req_n"
+    if any(e.startswith("resp_bytes=") for e in size_evals):
+        agg += " sum(resp_bytes) as resp_bytes count(resp_bytes) as resp_n max(resp_bytes) as resp_max"
     lines += [
         '| fillnull value="" uri_query',
         "| where isnotnull(site) AND isnotnull(uri_path)",
-        "| stats count min(_time) as et max(_time) as lt values(src) as src values(status) as status "
-        "values(action) as action by site uri_path uri_query",
+        agg + " by site uri_path uri_query",
     ]
     return "\n".join(lines)
 
@@ -63,6 +89,15 @@ def _list(v):
     if v is None or v == "":
         return []
     return [str(x) for x in v] if isinstance(v, list) else [str(v)]
+
+
+def _num(v):
+    if v in (None, ""):
+        return None
+    try:
+        return float(v[0] if isinstance(v, list) else v)
+    except (TypeError, ValueError, IndexError):
+        return None
 
 
 def _epoch(v):
@@ -105,7 +140,8 @@ def merge(export_dir, out):
         key = (str(r.get("site", "")), str(r.get("uri_path", "")), str(r.get("uri_query", "") or ""))
         g = groups.get(key)
         if g is None:
-            g = groups[key] = {"count": 0, "et": None, "lt": None, "src": set(), "status": set(), "action": set()}
+            g = groups[key] = {"count": 0, "et": None, "lt": None, "src": set(), "status": set(), "action": set(),
+                               "req_bytes": 0, "req_n": 0, "resp_bytes": 0, "resp_n": 0, "resp_max": None}
         try:
             g["count"] += int(float(r.get("count") or 0))
         except (TypeError, ValueError):
@@ -117,13 +153,22 @@ def merge(export_dir, out):
             g["lt"] = lt if g["lt"] is None else max(g["lt"], lt)
         for k in ("src", "status", "action"):
             g[k].update(_list(r.get(k)))
+        for k in SIZE_SUMS:
+            g[k] += _num(r.get(k)) or 0
+        mx = _num(r.get("resp_max"))
+        if mx is not None:
+            g["resp_max"] = mx if g["resp_max"] is None else max(g["resp_max"], mx)
     tmp = Path(str(out) + ".tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
         for (site, path, query), g in sorted(groups.items()):
-            fh.write(json.dumps({"site": site, "uri_path": path, "uri_query": query, "count": g["count"],
-                                 "et": _utc(g["et"]), "lt": _utc(g["lt"]), "src": sorted(g["src"]),
-                                 "status": sorted(g["status"]), "action": sorted(g["action"])},
-                                ensure_ascii=False) + "\n")
+            row = {"site": site, "uri_path": path, "uri_query": query, "count": g["count"],
+                   "et": _utc(g["et"]), "lt": _utc(g["lt"]), "src": sorted(g["src"]),
+                   "status": sorted(g["status"]), "action": sorted(g["action"])}
+            if g["req_n"]:
+                row.update(req_bytes=int(g["req_bytes"]), req_n=int(g["req_n"]))
+            if g["resp_n"]:
+                row.update(resp_bytes=int(g["resp_bytes"]), resp_n=int(g["resp_n"]), resp_max=int(g["resp_max"] or 0))
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     os.replace(tmp, out)
     print(f"{rows:,} rows from the export windows -> {len(groups):,} request groups in {out}", file=sys.stderr)
 
@@ -292,6 +337,9 @@ def main():
     q.add_argument("--extract", default="")
     for f in FIELDS:
         q.add_argument(f"--{f.replace('_', '-')}", dest=f, default=f)
+    for f, dflt in SIZE_FIELDS.items():
+        q.add_argument(f"--{f.replace('_', '-')}", dest=f, default=dflt,
+                       help=f"size fields, first present wins (default {dflt}; '-' = none)")
     a = ap.parse_args()
     if a.cmd == "merge":
         merge(a.export_dir, a.output)
@@ -300,7 +348,7 @@ def main():
     elif a.cmd == "iocs":
         iocs(a.analysis, a.output)
     else:
-        print(build_query(a.base, a.extract, {f: getattr(a, f) for f in FIELDS}))
+        print(build_query(a.base, a.extract, {f: getattr(a, f) for f in (*FIELDS, *SIZE_FIELDS)}))
 
 
 if __name__ == "__main__":
