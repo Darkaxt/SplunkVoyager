@@ -324,6 +324,17 @@ class AuthAnalysisTest(unittest.TestCase):
             self.assertNotIn("__DATA__", html_)
             rows = Path(d, "entities", "auth_events.csv").read_text(encoding="utf-8-sig").splitlines()
             self.assertEqual(len(rows), 1 + 22)
+            # quick check: who sent failures to whom, and each named system's place
+            import bf_check
+            fl = bf_check.flows(events)
+            x = fl[("apphost1.example (10.9.8.7)", "dbclu1.example / PAYDB_01_P (CDB01)")]
+            self.assertEqual((bf_check.fails(x), x["n"]["locked"], x["n"]["success"], x["accounts"]["BS_APP"]), (10, 2, 1, 5))
+            self.assertIn(("WS1", "dc1.example / CORP"), fl)                       # lockout source from CallerComputerName
+            out = subprocess.run([sys.executable, str(ROOT / "bf_check.py"), d, "apphost1", "dbclu1", "nothere"],
+                                 capture_output=True, text=True, check=True).stdout
+            self.assertIn("as SOURCE      : 13 failures sent to 4 destination(s)", out)
+            self.assertIn("as DESTINATION : 10 failures received from 1 source(s)", out)
+            self.assertIn("not found in any failed logon", out)
 
 
 class UpdaterTest(unittest.TestCase):

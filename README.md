@@ -135,7 +135,9 @@ failures and alert-log logons. Parsed: `oracle:audit:db` LOGON rows, `oracle:aud
 (length-prefixed fields, so SQL text is never mistaken for a status), `oracle:listener:xml`, `oracle:alert:xml`,
 Windows Security 4624/4625/4648/4740/4771/4776, Linux sshd / pam / faillock. An event exported under several
 mapped values counts once. Output: `entities/auth_report.html` and `entities/auth_events.csv`; by hand:
-`python auth_analysis.py data\investigations\<case>`. `python auth_samples.py <case>` picks a few raw events
+`python auth_analysis.py data\investigations\<case>`. `python bf_check.py data\investigations\<case> [system ...]` is the quick version in the terminal: failed logons
+and connections by direction (source -> destination, failures, lockouts, successes, accounts, first/last), and
+for each system named, the failures it sent and those it received. `python auth_samples.py <case>` picks a few raw events
 per sourcetype to look at a dump's formats.
 
 **Large exports.** The merge of the time windows keeps its memory bounded however big the export is: above
@@ -180,6 +182,7 @@ with the new range. Each script has `--help`. The command-line tools use the def
 | `network_feed.py` | query builder, window merge and findings between the export and Payload Analyzer |
 | `network_map.py`, `network_map_template.html` | attack map of a network run |
 | `auth_analysis.py` | authentication analysis of an entity-mapper dump (+ `auth_report_template.html`) |
+| `bf_check.py` | quick brute-force check: who sent failed logons to whom |
 | `auth_samples.py` | sample raw events per sourcetype from a dump |
 | `credentials.py` | credentials in request URLs: scan, credentials.jsonl, report section |
 | `blocklist.py` | global blocklist for the findings lists |

@@ -65,7 +65,7 @@ def build(case):
     add("XmlWinEventLog", "2026-11-26T07:00:00.000+00:00", "Name=Microsoft-Windows-Security-Auditing EventID=4625 Computer=dc1.example "
         "TargetUserName=jdoe TargetDomainName=CORP Status=0xc000006d SubStatus=0xc000006a LogonType=3 IpAddress=10.9.8.7 IpPort=51000 WorkstationName=WS1", host="dc1.example")
     add("XmlWinEventLog", "2026-11-26T07:01:00.000+00:00", "Name=Microsoft-Windows-Security-Auditing EventID=4740 Computer=dc1.example "
-        "TargetUserName=jdoe TargetDomainName=CORP", host="dc1.example")
+        "TargetUserName=jdoe TargetDomainName=CORP CallerComputerName=WS1", host="dc1.example")
     add("XmlWinEventLog", "2026-11-26T07:00:30.000+00:00", "EventID=4688 Computer=dc1.example SubjectUserName=jdoe NewProcessName='C:\\x\\sqlplus.exe'", host="dc1.example")
     add("linux_secure", "2026-11-26T06:00:00.000+00:00", "Nov 26 07:00:00 apphost1 sshd[1]: Failed password for invalid user admin from 10.9.8.7 port 4242 ssh2", host="apphost1")
     add("linux_secure", "2026-11-26T06:00:05.000+00:00", "Nov 26 07:00:05 apphost1 sshd[1]: Accepted publickey for oracle from 10.1.1.1 port 4243 ssh2", host="apphost1")

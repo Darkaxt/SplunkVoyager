@@ -218,7 +218,8 @@ def p_windows(raw, ev):
     return [dict(ev, kind="logon", account=f.get("TargetUserName", ""), code=f"{eid} {status}".strip(), result=res,
                  meaning=meaning, target=f.get("TargetDomainName", ""), target_host=f.get("Computer") or ev["host"],
                  src_ip="" if ip in ("-", "::1", "127.0.0.1") else ip, src_port=f.get("IpPort", ""),
-                 src_host=f.get("WorkstationName", "") if f.get("WorkstationName", "-") != "-" else "",
+                 src_host=(f.get("WorkstationName", "") if f.get("WorkstationName", "-") != "-" else "")
+                 or (f.get("CallerComputerName", "") if f.get("CallerComputerName", "-") != "-" else ""),
                  os_user=f.get("SubjectUserName", ""), program=f.get("ProcessName", ""), privilege="",
                  auth=f.get("AuthenticationPackageName", "") or f.get("LogonProcessName", ""), via="")]
 
