@@ -186,25 +186,34 @@ def _bucket_of(k, nb):
     return zlib.crc32("\t".join(k).encode("utf-8", "surrogatepass")) % nb
 
 
-def _spread_part(part, bdir, nb):
-    """Pass 1 for one part file: its rows go to this process's own bucket files (appended gzip members)."""
+def _spread_parts(parts, bdir, nb, wid):
+    """Pass 1 for one worker: stream its part files into its own bucket files, kept open for the whole pass,
+    so memory stays small whatever the size of a part. Rows done so far go to w<id>.n for the progress log."""
     import gzip
-    own = Path(bdir) / f"p{os.getpid()}"
+    import time
+    own = Path(bdir) / f"w{wid:02d}"
     own.mkdir(exist_ok=True)
-    lines = [[] for _ in range(nb)]
-    n = 0
-    with part.open() as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            r = json.loads(line)
-            n += 1
-            lines[_bucket_of(_key(r.get("result", r) if isinstance(r, dict) else r), nb)].append(line)
-    for b, ls in enumerate(lines):
-        if ls:
-            with gzip.open(own / f"b{b:04d}.jsonl.gz", "at", encoding="utf-8", compresslevel=1, newline="\n") as fh:
-                fh.write("\n".join(ls) + "\n")
+    prog = Path(bdir) / f"w{wid:02d}.n"
+    outs = [gzip.open(own / f"b{b:04d}.jsonl.gz", "wt", encoding="utf-8", compresslevel=1, newline="\n")
+            for b in range(nb)]
+    n, last = 0, time.time()
+    try:
+        for part in parts:
+            with part.open() as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    r = json.loads(line)
+                    outs[_bucket_of(_key(r.get("result", r) if isinstance(r, dict) else r), nb)].write(line + "\n")
+                    n += 1
+                    if not n & 0x3FFF and time.time() - last > 5:
+                        last = time.time()
+                        prog.write_text(str(n))
+    finally:
+        for o in outs:
+            o.close()
+    prog.write_text(str(n))
     return n
 
 
@@ -212,7 +221,7 @@ def _aggregate_bucket(bdir, b):
     """Pass 2 for one bucket: every request group is in it whole; written next to it, sorted."""
     import gzip
     groups = {}
-    for bf in Path(bdir).glob(f"p*/b{b:04d}.jsonl.gz"):
+    for bf in Path(bdir).glob(f"w*/b{b:04d}.jsonl.gz"):
         with gzip.open(bf, "rt", encoding="utf-8") as fh:
             for line in fh:
                 r = json.loads(line)
@@ -282,13 +291,32 @@ def merge(export_dir, out, log=None, bucket_rows=MERGE_BUCKET_ROWS, workers=None
         try:
             last = time.time()
             import multiprocessing     # spawn everywhere: what runs on Windows is what is tested on Linux
+            from concurrent.futures import wait
+            # parts shared out by size (largest first, to the least loaded worker), one task per worker
+            loads, shares = [0] * workers, [[] for _ in range(workers)]
+            for f in sorted(files, key=lambda f: -f.size):
+                w = loads.index(min(loads))
+                shares[w].append(f)
+                loads[w] += f.size
             with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn")) as ex:
-                futs = [ex.submit(_spread_part, f, str(bdir), nb) for f in files]
-                for i, fu in enumerate(as_completed(futs), 1):
-                    rows += fu.result()
-                    if time.time() - last >= 30 or i == len(files):
-                        last = time.time()
-                        log(f"Merge pass 1: {i}/{len(files)} parts, {rows:,}/{expected:,} rows{eta(i, len(files), t0)}")
+                futs = [ex.submit(_spread_parts, sh, str(bdir), nb, w) for w, sh in enumerate(shares) if sh]
+                while True:
+                    done, pending = wait(futs, timeout=30)
+                    for fu in done:
+                        fu.result()                    # a worker's error stops the merge here
+                    rows = 0
+                    for pf in bdir.glob("w*.n"):
+                        try:
+                            rows += int(pf.read_text() or 0)
+                        except (OSError, ValueError):
+                            pass
+                    el = time.time() - t0
+                    left = el / rows * (expected - rows) if rows else 0
+                    log(f"Merge pass 1: {rows:,}/{expected:,} rows ({rows / max(el, 1):,.0f}/s)"
+                        + (f", about {left / 60:,.0f} min left" if rows and left >= 60 and pending else ""))
+                    if not pending:
+                        break
+                rows = sum(fu.result() for fu in futs)
                 size = sum(p.stat().st_size for p in bdir.rglob("*.gz"))
                 log(f"Merge pass 1 done: {rows:,} rows, {size / 1e9:,.1f} GB of buckets. Pass 2 of 2: aggregating")
                 n_groups, t1, last = 0, time.time(), time.time()
