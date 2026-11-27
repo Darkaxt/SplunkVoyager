@@ -188,11 +188,29 @@ def start_application(open_browser=True):
         """Export runs started by an older exporter (still running) get their finished windows compressed here."""
         import time as _t
         import exportfiles
+        from datetime import datetime as _dt
         from app.services.workbench import INV_ROOT
+
+        def job_log(folder):
+            """The log of the job that owns an export folder (network/<job id>/export -> jobs/<job id>/log.txt)."""
+            try:
+                rel = Path(folder).resolve().relative_to(INV_ROOT.resolve())
+            except ValueError:
+                return None
+            inv = INV_ROOT / rel.parts[0]
+            for name in rel.parts[1:]:
+                lp = inv / "jobs" / name / "log.txt"
+                if lp.is_file():
+                    def write(msg, lp=lp):
+                        logger.info(msg)
+                        with open(lp, "a", encoding="utf-8") as fh:
+                            fh.write(f"[{_dt.now():%H:%M:%S}] {msg}\n")
+                    return write
+            return None
         while True:
             try:
                 if INV_ROOT.is_dir():
-                    exportfiles.sweep(INV_ROOT, logger.info)
+                    exportfiles.sweep(INV_ROOT, logger.info, job_log)
             except Exception as e:
                 logger.error(f"Compressing finished export windows: {e}")
             _t.sleep(120)

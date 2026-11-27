@@ -153,12 +153,13 @@ def pack_done(folder, log=print):
     return n
 
 
-def sweep(root, log=print):
-    """pack_done for every export run under root (Voyager runs this periodically)."""
+def sweep(root, log=print, log_for=None):
+    """pack_done for every export run under root (Voyager runs this periodically).
+    log_for(folder) may return a run-specific log function (e.g. writing to the job's own log)."""
     n = 0
     for m in Path(root).rglob("manifest.json"):
         if any(m.parent.glob("part-*.jsonl")) or any(m.parent.glob("part-*.csv")):
-            n += pack_done(m.parent, log)
+            n += pack_done(m.parent, (log_for and log_for(m.parent)) or log)
     return n
 
 
