@@ -116,6 +116,12 @@ stopped, without repeating finished windows.
 
 ## Command line
 
+**Large exports.** The merge of the time windows keeps its memory bounded however big the export is: above
+300,000 rows it spreads the rows over compressed buckets beside the output (about 40 bytes per row) and
+aggregates one bucket at a time, in up to 4 processes, logging progress and the time left. The merged
+`requests.jsonl` is not compressed: count roughly 300 bytes per distinct request (site + path + query string).
+`VOYAGER_MERGE_BUCKET_ROWS` changes the bucket size (memory per process grows with it).
+
 Everything the GUI does is available from the command line too:
 
 ```

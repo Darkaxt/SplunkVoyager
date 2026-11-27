@@ -64,6 +64,33 @@ class NetworkFeedTest(unittest.TestCase):
         self.assertEqual(x["et"], "2026-10-21 00:00:00")
         self.assertEqual(x["lt"], "2026-10-22 00:01:40")
 
+    def test_large_merge_in_buckets_matches(self):
+        """Exports too big for memory are merged through on-disk buckets in several processes: same rows."""
+        import random, zipfile
+        rnd = random.Random(3)
+        with tempfile.TemporaryDirectory() as d:
+            for w in range(1, 7):
+                rows = [{"result": {"site": f"s{rnd.randint(1, 3)}.example", "uri_path": f"/p{rnd.randint(1, 9)}",
+                                    "uri_query": f"id={rnd.randint(1, 400)}", "count": str(rnd.randint(1, 5)),
+                                    "et": str(1792540800 + w * 3600), "lt": str(1792540800 + w * 3600 + 60),
+                                    "src": f"192.0.2.{rnd.randint(1, 50)}", "status": "200", "action": "allowed",
+                                    "resp_bytes": "4000", "resp_n": "1", "resp_max": "4000"}} for _ in range(500)]
+                text = "".join(json.dumps(r) + "\n" for r in rows)
+                if w % 2:                                    # some windows already compressed, as in a real run
+                    with zipfile.ZipFile(Path(d, f"part-{w:04d}.jsonl.zip"), "w", zipfile.ZIP_DEFLATED) as z:
+                        z.writestr(f"part-{w:04d}.jsonl", text)
+                else:
+                    Path(d, f"part-{w:04d}.jsonl").write_text(text)
+            msgs = []
+            network_feed.merge(d, Path(d, "one.jsonl"), log=msgs.append)
+            network_feed.merge(d, Path(d, "many.jsonl"), log=msgs.append, bucket_rows=250, workers=2)
+            one = sorted(Path(d, "one.jsonl").read_text().splitlines())
+            many = sorted(Path(d, "many.jsonl").read_text().splitlines())
+            self.assertEqual(one, many)
+            self.assertGreater(len(one), 1000)
+            self.assertTrue(any("Pass 1 of 2" in m for m in msgs) and any("Merge pass 2: " in m for m in msgs), msgs)
+            self.assertFalse(list(Path(d).glob("*.buckets")))  # temporary buckets removed
+
 
 class WebAppTest(unittest.TestCase):
     @classmethod

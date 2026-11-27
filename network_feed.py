@@ -119,58 +119,194 @@ def _utc(t):
     return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if t is not None else None
 
 
-def read_export(export_dir):
+MERGE_BUCKET_ROWS = int(os.environ.get("VOYAGER_MERGE_BUCKET_ROWS", 300_000))       # export rows per on-disk bucket when merging; bounds each worker's memory
+
+
+def _new_group():
+    return {"count": 0, "et": None, "lt": None, "src": set(), "status": set(), "action": set(),
+            "req_bytes": 0, "req_n": 0, "resp_bytes": 0, "resp_n": 0, "resp_max": None}
+
+
+def _key(r):
+    return (str(r.get("site", "")), str(r.get("uri_path", "")), str(r.get("uri_query", "") or ""))
+
+
+def _add(g, r):
+    try:
+        g["count"] += int(float(r.get("count") or 0))
+    except (TypeError, ValueError):
+        pass
+    et, lt = _epoch(r.get("et")), _epoch(r.get("lt"))
+    if et is not None:
+        g["et"] = et if g["et"] is None else min(g["et"], et)
+    if lt is not None:
+        g["lt"] = lt if g["lt"] is None else max(g["lt"], lt)
+    for k in ("src", "status", "action"):
+        g[k].update(_list(r.get(k)))
+    for k in SIZE_SUMS:
+        g[k] += _num(r.get(k)) or 0
+    mx = _num(r.get("resp_max"))
+    if mx is not None:
+        g["resp_max"] = mx if g["resp_max"] is None else max(g["resp_max"], mx)
+
+
+def _write_groups(fh, groups):
+    for (site, path, query), g in sorted(groups.items()):
+        row = {"site": site, "uri_path": path, "uri_query": query, "count": g["count"],
+               "et": _utc(g["et"]), "lt": _utc(g["lt"]), "src": sorted(g["src"]),
+               "status": sorted(g["status"]), "action": sorted(g["action"])}
+        if g["req_n"]:
+            row.update(req_bytes=int(g["req_bytes"]), req_n=int(g["req_n"]))
+        if g["resp_n"]:
+            row.update(resp_bytes=int(g["resp_bytes"]), resp_n=int(g["resp_n"]), resp_max=int(g["resp_max"] or 0))
+        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _rows(part):
+    with part.open() as fh:
+        for line in fh:
+            if line.strip():
+                r = json.loads(line)
+                yield r.get("result", r) if isinstance(r, dict) else r
+
+
+def _expected_rows(export_dir, files):
+    try:
+        man = json.loads((Path(export_dir) / "manifest.json").read_text(encoding="utf-8"))
+        n = sum(int(w.get("records") or 0) for w in man.get("windows", []))
+        if n:
+            return n
+    except (OSError, ValueError, TypeError):
+        pass
+    return sum(f.size for f in files) // 400 or 1          # rough: bytes per exported row
+
+
+def _bucket_of(k, nb):
+    import zlib
+    return zlib.crc32("\t".join(k).encode("utf-8", "surrogatepass")) % nb
+
+
+def _spread_part(part, bdir, nb):
+    """Pass 1 for one part file: its rows go to this process's own bucket files (appended gzip members)."""
+    import gzip
+    own = Path(bdir) / f"p{os.getpid()}"
+    own.mkdir(exist_ok=True)
+    lines = [[] for _ in range(nb)]
+    n = 0
+    with part.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            r = json.loads(line)
+            n += 1
+            lines[_bucket_of(_key(r.get("result", r) if isinstance(r, dict) else r), nb)].append(line)
+    for b, ls in enumerate(lines):
+        if ls:
+            with gzip.open(own / f"b{b:04d}.jsonl.gz", "at", encoding="utf-8", compresslevel=1, newline="\n") as fh:
+                fh.write("\n".join(ls) + "\n")
+    return n
+
+
+def _aggregate_bucket(bdir, b):
+    """Pass 2 for one bucket: every request group is in it whole; written next to it, sorted."""
+    import gzip
+    groups = {}
+    for bf in Path(bdir).glob(f"p*/b{b:04d}.jsonl.gz"):
+        with gzip.open(bf, "rt", encoding="utf-8") as fh:
+            for line in fh:
+                r = json.loads(line)
+                r = r.get("result", r) if isinstance(r, dict) else r
+                k = _key(r)
+                g = groups.get(k)
+                if g is None:
+                    g = groups[k] = _new_group()
+                _add(g, r)
+        bf.unlink()
+    out = Path(bdir) / f"out-{b:04d}.jsonl"
+    with open(out, "w", encoding="utf-8", newline="\n") as fh:
+        _write_groups(fh, groups)
+    return len(groups)
+
+
+def merge(export_dir, out, log=None, bucket_rows=MERGE_BUCKET_ROWS, workers=None):
+    """
+    One row per site + path + query string over all export windows.
+
+    Memory stays bounded however large the export: when it has more than bucket_rows rows, pass 1 spreads the
+    rows over on-disk buckets (gzip, beside the output) by a hash of site + path + query string, so every
+    request group lands whole in one bucket; pass 2 aggregates one bucket at a time. Both passes run in
+    `workers` processes (default: cores - 1, at most 4). Progress is logged as it goes.
+    """
     import exportfiles
+    import shutil
+    import time
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    log = log or (lambda m: print(m, file=sys.stderr, flush=True))
     files = exportfiles.parts(export_dir, "jsonl")
     if not files:
         raise SystemExit(f"No part files (part-*.jsonl, part-*.jsonl.zip or export.zip) in {export_dir}")
-    for f in files:
-        with f.open() as fh:
-            for line in fh:
-                if line.strip():
-                    r = json.loads(line)
-                    yield r.get("result", r) if isinstance(r, dict) else r
-
-
-def merge(export_dir, out):
-    groups = {}
-    rows = 0
-    for r in read_export(export_dir):
-        rows += 1
-        key = (str(r.get("site", "")), str(r.get("uri_path", "")), str(r.get("uri_query", "") or ""))
-        g = groups.get(key)
-        if g is None:
-            g = groups[key] = {"count": 0, "et": None, "lt": None, "src": set(), "status": set(), "action": set(),
-                               "req_bytes": 0, "req_n": 0, "resp_bytes": 0, "resp_n": 0, "resp_max": None}
-        try:
-            g["count"] += int(float(r.get("count") or 0))
-        except (TypeError, ValueError):
-            pass
-        et, lt = _epoch(r.get("et")), _epoch(r.get("lt"))
-        if et is not None:
-            g["et"] = et if g["et"] is None else min(g["et"], et)
-        if lt is not None:
-            g["lt"] = lt if g["lt"] is None else max(g["lt"], lt)
-        for k in ("src", "status", "action"):
-            g[k].update(_list(r.get(k)))
-        for k in SIZE_SUMS:
-            g[k] += _num(r.get(k)) or 0
-        mx = _num(r.get("resp_max"))
-        if mx is not None:
-            g["resp_max"] = mx if g["resp_max"] is None else max(g["resp_max"], mx)
+    out = Path(out)
     tmp = Path(str(out) + ".tmp")
-    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-        for (site, path, query), g in sorted(groups.items()):
-            row = {"site": site, "uri_path": path, "uri_query": query, "count": g["count"],
-                   "et": _utc(g["et"]), "lt": _utc(g["lt"]), "src": sorted(g["src"]),
-                   "status": sorted(g["status"]), "action": sorted(g["action"])}
-            if g["req_n"]:
-                row.update(req_bytes=int(g["req_bytes"]), req_n=int(g["req_n"]))
-            if g["resp_n"]:
-                row.update(resp_bytes=int(g["resp_bytes"]), resp_n=int(g["resp_n"]), resp_max=int(g["resp_max"] or 0))
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    expected = _expected_rows(export_dir, files)
+    nb = max(1, -(-expected // bucket_rows))
+    workers = workers or max(1, min(4, (os.cpu_count() or 2) - 1))
+    t0, rows = time.time(), 0
+
+    def eta(done, total, since):
+        el = time.time() - since
+        return f", about {el / done * (total - done) / 60:,.0f} min left" if done and el / done * (total - done) >= 60 else ""
+
+    if nb == 1:
+        groups, last = {}, 0.0
+        for i, f in enumerate(files, 1):
+            for r in _rows(f):
+                rows += 1
+                k = _key(r)
+                g = groups.get(k)
+                if g is None:
+                    g = groups[k] = _new_group()
+                _add(g, r)
+            if time.time() - last >= 30 or i == len(files):
+                last = time.time()
+                log(f"Merge: part {i}/{len(files)}, {rows:,} rows{eta(i, len(files), t0)}")
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            _write_groups(fh, groups)
+        n_groups = len(groups)
+    else:
+        bdir = out.with_name(out.name + ".buckets")
+        shutil.rmtree(bdir, ignore_errors=True)
+        bdir.mkdir(parents=True)
+        log(f"Merge: {expected:,} rows expected in {len(files)} parts; {nb} buckets in {bdir}, {workers} processes. "
+            f"Pass 1 of 2: spreading the rows")
+        try:
+            last = time.time()
+            import multiprocessing     # spawn everywhere: what runs on Windows is what is tested on Linux
+            with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn")) as ex:
+                futs = [ex.submit(_spread_part, f, str(bdir), nb) for f in files]
+                for i, fu in enumerate(as_completed(futs), 1):
+                    rows += fu.result()
+                    if time.time() - last >= 30 or i == len(files):
+                        last = time.time()
+                        log(f"Merge pass 1: {i}/{len(files)} parts, {rows:,}/{expected:,} rows{eta(i, len(files), t0)}")
+                size = sum(p.stat().st_size for p in bdir.rglob("*.gz"))
+                log(f"Merge pass 1 done: {rows:,} rows, {size / 1e9:,.1f} GB of buckets. Pass 2 of 2: aggregating")
+                n_groups, t1, last = 0, time.time(), time.time()
+                with open(tmp, "wb") as fh:
+                    for b, n in enumerate(ex.map(_aggregate_bucket, [str(bdir)] * nb, range(nb)), 1):
+                        part = bdir / f"out-{b - 1:04d}.jsonl"
+                        with open(part, "rb") as src:
+                            shutil.copyfileobj(src, fh, 1 << 20)
+                        part.unlink()
+                        n_groups += n
+                        if time.time() - last >= 30 or b == nb:
+                            last = time.time()
+                            log(f"Merge pass 2: {b}/{nb} buckets, {n_groups:,} request groups{eta(b, nb, t1)}")
+        finally:
+            shutil.rmtree(bdir, ignore_errors=True)
     os.replace(tmp, out)
-    print(f"{rows:,} rows from the export windows -> {len(groups):,} request groups in {out}", file=sys.stderr)
+    log(f"{rows:,} rows from the export windows -> {n_groups:,} request groups in {out} "
+        f"({out.stat().st_size / 1e9:,.2f} GB, {(time.time() - t0) / 60:,.1f} min)")
 
 
 def _run_tee(argv):
