@@ -1,16 +1,21 @@
 """Quick brute-force check of an entity-mapper dump: who sent failed logons to whom.
 
-  python bf_check.py data\\investigations\\<case>                       all directions with failures
-  python bf_check.py data\\investigations\\<case> idt014958 10.1.2.3    ... and, for each system named,
-                                                                       what it sent and what it received
+  python bf_check.py data\\investigations\\<case>                       all directions with failures and, for
+                                                                       each value the entity mapper searched (the
+                                                                       seeds), what it sent and what it received
+  python bf_check.py data\\investigations\\<case> idt014958 10.1.2.3    the same for these systems instead
 
 Uses the parsers of auth_analysis.py (Oracle audit, listener and alert logs, Windows Security, Linux auth).
 Source = the client (address, and host name when the log has it); destination = the system that logged the
 failure (database and its host, Windows computer, Linux host). A system is matched by any part of its name or
-address, case-insensitively ("idt014958" matches "idt014958.example.org").
+address, case-insensitively, and a host name also by its short form and the reverse ("idt014958.example.org"
+matches a log that says "idt014958").
 """
 import argparse
+import json
+import re
 import sys
+from pathlib import Path
 from collections import Counter, defaultdict
 
 import auth_analysis as aa
@@ -49,6 +54,23 @@ def flows(events):
     return f
 
 
+def matcher(name):
+    """Any part of the name or address; a host name also matches its short form and the reverse
+    (idt014958.example.org matches a log that says idt014958)."""
+    q = name.lower().strip()
+    short = q.split(".")[0] if not re.fullmatch(r"[\d.:]+", q) else None
+
+    def match(label):
+        lab = label.lower()
+        toks = [t for t in re.split(r"[^\w.:\-]+", lab) if t]
+        if short is None:                              # an address: the whole address only (10.1.1.1 is not 10.1.1.10)
+            return q in toks
+        if q in lab:
+            return True
+        return any(t.split(".")[0] == short for t in toks)
+    return match
+
+
 def fails(x):
     return sum(x["n"][r] for r in FAIL)
 
@@ -71,10 +93,21 @@ def table(rows, top):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("case", help="investigation folder (or its entities folder)")
-    ap.add_argument("systems", nargs="*", help="systems to place: name or address, or any part of it")
+    ap.add_argument("systems", nargs="*", help="systems to place: name or address, or any part of it "
+                                               "(default: the values the entity mapper searched)")
     ap.add_argument("--top", type=int, default=25, help="rows per table (default 25)")
     ap.add_argument("--min", type=int, default=1, help="hide directions with fewer failures (default 1)")
     a = ap.parse_args()
+    systems = a.systems
+    if not systems:
+        root = Path(a.case)
+        ed = root / "entities" if (root / "entities").is_dir() else root
+        try:
+            systems = [s["value"] for s in json.loads((ed / "case.json").read_text(encoding="utf-8")).get("seeds", [])]
+        except (OSError, ValueError):
+            systems = []
+        if systems:
+            print("Systems: the values the entity mapper searched: " + ", ".join(systems), file=sys.stderr)
     events, _ = aa.read_dump(a.case, log=lambda m: print(m, file=sys.stderr, flush=True))
     f = flows(events)
     rows = sorted(((k, x) for k, x in f.items() if fails(x) >= a.min), key=lambda kv: -fails(kv[1]))
@@ -82,12 +115,12 @@ def main():
     print(f"\nFailed logons and connections by direction: {total:,} failures in {len(rows)} source -> destination pairs\n")
     print(table(rows, a.top) if rows else "No failures found.")
 
-    for sysname in a.systems:
-        q = sysname.lower()
-        sent = [(k, x) for k, x in rows if q in k[0].lower()]
-        recv = [(k, x) for k, x in rows if q in k[1].lower()]
-        ok_sent = sum(x["n"]["success"] for k, x in f.items() if q in k[0].lower())
-        ok_recv = sum(x["n"]["success"] for k, x in f.items() if q in k[1].lower())
+    for sysname in systems:
+        m = matcher(sysname)
+        sent = [(k, x) for k, x in rows if m(k[0])]
+        recv = [(k, x) for k, x in rows if m(k[1])]
+        ok_sent = sum(x["n"]["success"] for k, x in f.items() if m(k[0]))
+        ok_recv = sum(x["n"]["success"] for k, x in f.items() if m(k[1]))
         s_n, r_n = sum(fails(x) for _, x in sent), sum(fails(x) for _, x in recv)
         print(f"\n{'=' * 100}\n{sysname}")
         print(f"  as SOURCE      : {s_n:,} failures sent to {len({k[1] for k, _ in sent})} destination(s), "
