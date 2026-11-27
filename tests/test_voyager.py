@@ -332,16 +332,17 @@ class AuthAnalysisTest(unittest.TestCase):
             self.assertIn(("WS1", "dc1.example / CORP"), fl)                       # lockout source from CallerComputerName
             out = subprocess.run([sys.executable, str(ROOT / "bf_check.py"), d, "apphost1", "dbclu1", "nothere"],
                                  capture_output=True, text=True, check=True).stdout
-            self.assertIn("as SOURCE      : 13 failures sent to 4 destination(s)", out)
-            self.assertIn("as DESTINATION : 10 failures received from 1 source(s)", out)
+            self.assertIn("as SOURCE      : 13 failures (11 wrong password / locked) sent to 4 destination(s)", out)
+            self.assertIn("as DESTINATION : 10 failures (10 wrong password / locked) received from 1 source(s)", out)
             self.assertIn("not found in any failed logon", out)
             Path(d, "entities", "case.json").write_text(json.dumps({"seeds": [{"value": "apphost1.example"}, {"value": "10.9.8.7"}]}))
             r = subprocess.run([sys.executable, str(ROOT / "bf_check.py"), d], capture_output=True, text=True, check=True)
             self.assertIn("the values the entity mapper searched: apphost1.example, 10.9.8.7", r.stderr)
-            self.assertIn("\n10.9.8.7\n  as SOURCE      : 14 failures sent to 5 destination(s)", r.stdout)
+            self.assertIn("\n10.9.8.7\n  as SOURCE      : 14 failures (13 wrong password / locked) sent to 5 destination(s)", r.stdout)
             # the full name of a seed also finds the short name a Linux log uses (apphost1 / ssh)
-            self.assertIn("\napphost1.example\n  as SOURCE      : 13 failures sent to 4 destination(s), 9 account(s); 4 successful"
-                          " logons/connections sent\n  as DESTINATION : 1 failures received from 1 source(s)", r.stdout)
+            self.assertIn("\napphost1.example\n  as SOURCE      : 13 failures (11 wrong password / locked) sent to 4 destination(s), "
+                          "9 account(s); 4 successful logons/connections sent\n  as DESTINATION : 1 failures (1 wrong password / locked) "
+                          "received from 1 source(s)", r.stdout)
             self.assertFalse(bf_check.matcher("apphost1.example")("apphost12 / ssh"))
             self.assertFalse(bf_check.matcher("10.9.8.7")("ws (10.9.8.70)"))
             self.assertTrue(bf_check.matcher("10.9.8.7")("ws (10.9.8.7)"))

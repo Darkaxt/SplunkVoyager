@@ -79,11 +79,12 @@ def table(rows, top):
     out = []
     w_s = min(max([len(s) for (s, _), _ in rows[:top]] + [6]), 48)
     w_d = min(max([len(d) for (_, d), _ in rows[:top]] + [11]), 56)
-    out.append(f"{'SOURCE':<{w_s}}  {'DESTINATION':<{w_d}}  {'FAILED':>7} {'LOCKED':>6} {'OK':>6}  {'FIRST FAILURE (UTC)':<19}  "
-               f"{'LAST FAILURE (UTC)':<19}  ACCOUNTS (failures)")
+    out.append(f"{'SOURCE':<{w_s}}  {'DESTINATION':<{w_d}}  {'BAD PWD':>7} {'LOCKED':>6} {'OTHER':>6} {'OK':>6}  "
+               f"{'FIRST FAILURE (UTC)':<19}  {'LAST FAILURE (UTC)':<19}  ACCOUNTS (failures)")
     for (s, d), x in rows[:top]:
         acc = ", ".join(f"{a} {n}" for a, n in x["accounts"].most_common(4)) + (f", +{len(x['accounts']) - 4} more" if len(x["accounts"]) > 4 else "")
-        out.append(f"{s[:w_s]:<{w_s}}  {d[:w_d]:<{w_d}}  {fails(x):>7,} {x['n']['locked']:>6,} {x['n']['success']:>6,}  "
+        out.append(f"{s[:w_s]:<{w_s}}  {d[:w_d]:<{w_d}}  {x['n']['invalid credentials']:>7,} {x['n']['locked']:>6,} "
+                   f"{x['n']['expired'] + x['n']['other failure']:>6,} {x['n']['success']:>6,}  "
                    f"{aa.utc(x['first']):<19}  {aa.utc(x['last']):<19}  {acc}")
     if len(rows) > top:
         out.append(f"... {len(rows) - top} more (use --top)")
@@ -112,7 +113,11 @@ def main():
     f = flows(events)
     rows = sorted(((k, x) for k, x in f.items() if fails(x) >= a.min), key=lambda kv: -fails(kv[1]))
     total = sum(fails(x) for _, x in rows)
-    print(f"\nFailed logons and connections by direction: {total:,} failures in {len(rows)} source -> destination pairs\n")
+    cred = sum(x["n"]["invalid credentials"] + x["n"]["locked"] for _, x in rows)
+    print(f"\nFailed logons and connections by direction: {total:,} failures in {len(rows)} source -> destination pairs, "
+          f"{cred:,} of them wrong password or locked account\n"
+          "BAD PWD = invalid credentials (ORA-01017, Windows bad password, sshd Failed); LOCKED = account locked "
+          "(ORA-28000, 4740); OTHER = any other failure (privileges, listener / network errors, expired)\n")
     print(table(rows, a.top) if rows else "No failures found.")
 
     for sysname in systems:
@@ -122,11 +127,15 @@ def main():
         ok_sent = sum(x["n"]["success"] for k, x in f.items() if m(k[0]))
         ok_recv = sum(x["n"]["success"] for k, x in f.items() if m(k[1]))
         s_n, r_n = sum(fails(x) for _, x in sent), sum(fails(x) for _, x in recv)
+        sc = lambda xs: sum(x["n"]["invalid credentials"] + x["n"]["locked"] for _, x in xs)
+        own = [k for k, _ in sent if m(k[1])]
         print(f"\n{'=' * 100}\n{sysname}")
-        print(f"  as SOURCE      : {s_n:,} failures sent to {len({k[1] for k, _ in sent})} destination(s), "
-              f"{len({a for _, x in sent for a in x['accounts']})} account(s); {ok_sent:,} successful logons/connections sent")
-        print(f"  as DESTINATION : {r_n:,} failures received from {len({k[0] for k, _ in recv})} source(s), "
-              f"{len({a for _, x in recv for a in x['accounts']})} account(s); {ok_recv:,} successful logons/connections received")
+        print(f"  as SOURCE      : {s_n:,} failures ({sc(sent):,} wrong password / locked) sent to {len({k[1] for k, _ in sent})} "
+              f"destination(s), {len({a for _, x in sent for a in x['accounts']})} account(s); {ok_sent:,} successful logons/connections sent")
+        print(f"  as DESTINATION : {r_n:,} failures ({sc(recv):,} wrong password / locked) received from {len({k[0] for k, _ in recv})} "
+              f"source(s), {len({a for _, x in recv for a in x['accounts']})} account(s); {ok_recv:,} successful logons/connections received")
+        if own:
+            print(f"  ({len(own)} of these pairs go from {sysname} to itself, so they appear in both lines)")
         if not sent and not recv:
             print("  not found in any failed logon or connection (check the name: any part of it matches)")
         if sent:
@@ -134,7 +143,7 @@ def main():
         if recv:
             print(f"\n  Failures received by {sysname}:\n" + "\n".join("  " + l for l in table(recv, a.top).splitlines()))
         codes = Counter()
-        for _, x in sent + recv:
+        for _, x in {k: x for k, x in sent + recv}.items():      # a pair from the system to itself once
             codes.update(x["codes"])
         if codes:
             print("\n  Codes: " + " · ".join(f"{c} ×{n:,}" for c, n in codes.most_common(6)))
