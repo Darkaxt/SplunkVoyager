@@ -30,7 +30,14 @@
 .wb details summary { cursor:pointer; color:var(--muted); font-size:12.5px; margin-top:10px; }
 .wb pre, .wb .mono { font-family:Consolas, "SFMono-Regular", Menlo, monospace; font-size:12px; }
 .wb pre.spl { background:var(--bg); border:1px solid var(--line); border-radius:5px; padding:8px; white-space:pre-wrap; color:#c9d1d9; margin-top:6px; }
-.wb .logbox { margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+.wb .logbox { position:relative; }
+.wb tr.logrow td, .wb tr.logrow:hover td { background:transparent; padding-top:0; }
+.wb .copyico { position:absolute; top:15px; right:20px; z-index:1; display:flex; align-items:center; justify-content:center;
+  width:28px; height:26px; padding:0; border:1px solid var(--line); border-radius:5px; background:#1b1d21ee; color:var(--muted);
+  cursor:pointer; opacity:.55; transition:opacity .15s, color .15s; }
+.wb .logbox:hover .copyico, .wb .copyico:focus { opacity:1; }
+.wb .copyico:hover { color:#e6edf3; }
+.wb .copyico.done { opacity:1; color:#6fd3a3; border-color:#2f6b50; }
 .wb pre.log { overflow-wrap:anywhere; word-break:break-word; max-width:100%; }
 .wb pre.log { background:#111214; border:1px solid var(--line); border-radius:5px; padding:8px; max-height:340px; overflow:auto;
   white-space:pre-wrap; color:#c9d1d9; margin:8px 0 0; }

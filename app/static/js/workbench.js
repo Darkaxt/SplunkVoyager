@@ -259,12 +259,12 @@ const WB = (() => {
               <button data-log="${esc(j.id)}">${openLogs.has(j.id) ? 'Hide log' : 'Log'}</button>
               ${!running && j.kind !== 'reanalysis' ? `<button class="danger" data-act="delete" data-j="${esc(j.id)}" title="${j.kind === 'network' ? 'Remove this run: its log, export, report and re-analyses' : 'Remove this job and its log'}">✕</button>` : ''}
             </td></tr>
-`;
+            ${openLogs.has(j.id) ? `<tr class="logrow"><td colspan="6" data-logslot="${esc(j.id)}"></td></tr>` : ''}`;
         }).join('') + '</table>';
     }
     $('#jobs').addEventListener('click', async e => {
       const l = e.target.closest('[data-log]');
-      if (l) { openLogs.has(l.dataset.log) ? openLogs.delete(l.dataset.log) : openLogs.add(l.dataset.log); renderLogs(last, true); force = true; render(last); return; }
+      if (l) { openLogs.has(l.dataset.log) ? openLogs.delete(l.dataset.log) : openLogs.add(l.dataset.log); force = true; render(last); return; }
       const a = e.target.closest('[data-act]');
       if (!a) return;
       if (a.dataset.act === 'delete' && !confirm(a.title + '?')) return;
@@ -288,10 +288,12 @@ const WB = (() => {
         const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
         document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
       }
-      const t = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = t; }, 1200);
+      btn.classList.add('done'); btn.title = 'Copied'; setTimeout(() => { btn.classList.remove('done'); btn.title = 'Copy the whole log'; }, 1200);
     }
+    const CLIP = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M5.75 1h4.5c.41 0 .75.34.75.75V2h1.25C13.22 2 14 2.78 14 3.75v9.5c0 .97-.78 1.75-1.75 1.75h-8.5C2.78 15 2 14.22 2 13.25v-9.5C2 2.78 2.78 2 3.75 2H5v-.25c0-.41.34-.75.75-.75ZM5 3.5H3.75a.25.25 0 0 0-.25.25v9.5c0 .14.11.25.25.25h8.5c.14 0 .25-.11.25-.25v-9.5a.25.25 0 0 0-.25-.25H11v.75c0 .41-.34.75-.75.75h-4.5A.75.75 0 0 1 5 4.25V3.5Zm1.5-1v1h3v-1h-3Z"/></svg>';
+    // Log panels are kept between refreshes (so a selection or scroll position survives) and placed in their
+    // job's row after each redraw of the job table.
     function renderLogs(inv) {
-      const host = $('#logs');
       for (const [id, p] of logPanels) if (!openLogs.has(id)) { p.box.remove(); logPanels.delete(id); }
       for (const j of inv.jobs) {
         if (!openLogs.has(j.id)) continue;
@@ -299,18 +301,22 @@ const WB = (() => {
         if (!p) {
           const box = document.createElement('div');
           box.className = 'logbox';
-          box.innerHTML = `<div class="toolbar"><div><b>Log</b> · ${esc(j.title)} <span class="muted mono">${esc(j.id)}</span></div>
-            <div><button data-copy>Copy</button> <button data-close>Close</button></div></div><pre class="log"></pre>`;
-          box.querySelector('[data-close]').onclick = () => { openLogs.delete(j.id); renderLogs(last); force = true; render(last); };
-          box.querySelector('[data-copy]').onclick = async ev => copyText(await api(`${base}/jobs/${j.id}/log?tail=1000000`), ev.target);
-          host.append(box);
-          p = {box, pre: box.querySelector('pre'), text: null};
+          box.innerHTML = `<button class="copyico" title="Copy the whole log">${CLIP}</button><pre class="log"></pre>`;
+          const cb = box.querySelector('.copyico'); cb.onclick = async () => copyText(await api(`${base}/jobs/${j.id}/log?tail=1000000`), cb);
+          p = {box, pre: box.querySelector('pre'), text: null, top: 0};
           logPanels.set(j.id, p);
         }
+        const slot = document.querySelector(`#jobs [data-logslot="${CSS.escape(j.id)}"]`);
+        if (slot && p.box.parentNode !== slot) {
+          const top = p.pre.scrollTop || p.top;
+          slot.append(p.box); p.pre.scrollTop = top;
+        }
+        p.top = p.pre.scrollTop;
         if (j.log == null || j.log === p.text || selecting(p.pre)) continue;
-        const atEnd = p.pre.scrollHeight - p.pre.clientHeight - p.pre.scrollTop < 20;
+        const atEnd = p.text == null || p.pre.scrollHeight - p.pre.clientHeight - p.pre.scrollTop < 20;
         p.pre.textContent = j.log; p.text = j.log;
         if (atEnd) p.pre.scrollTop = p.pre.scrollHeight;
+        p.top = p.pre.scrollTop;
       }
     }
     function render(inv) {
@@ -321,6 +327,7 @@ const WB = (() => {
       setHtml($('#nf'), findingsHtml(inv));
       document.querySelectorAll('#nf .sel').forEach(c => { if (sel.has(c.value)) c.checked = true; });
       $('#nf-sub').textContent = inv.network.length ? `${inv.network.length} run${inv.network.length > 1 ? 's' : ''}` : '';
+      logPanels.forEach(p => { if (p.box.isConnected) p.top = p.pre.scrollTop; });
       setHtml($('#jobs'), jobsHtml(inv));
       renderLogs(inv);
       force = false;
