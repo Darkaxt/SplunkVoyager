@@ -133,5 +133,8 @@ table('alert',F.alert_logons,[
 
 $('#codes').innerHTML=`<dl class="kv">${Object.entries(D.ora).map(([c,m])=>`<dt class="mono">ORA-${c.padStart(5,'0')}</dt><dd>${esc(m)}</dd>`).join('')}</dl>
  <p class="note">Result groups: success = 0 or 28002 (logon with a password-expiry warning); invalid credentials = 1017, Windows 0xC000006A/0xC0000064/0xC000006D, sshd Failed / Invalid user; locked = 28000, Windows 4740 / 0xC0000234, faillock; expired = 28001; other failure = any other code.</p>
- <p class="note">Events read: ${Object.entries(D.stats).map(([k,v])=>`${esc(k)} ${Number(v).toLocaleString()}`).join(' · ')}</p>`;
+ <h3 style="font-size:14px;margin:14px 0 6px">Logs in the dump</h3>
+ <p class="note">Every sourcetype found in the mapped values' raw events, and whether this analysis parses it. For analysed logs an event exported under several mapped values counts once; for the others every copy is counted.</p>
+ <table><tr><th>Sourcetype</th><th>Analysed</th><th>Events</th></tr>${Object.entries(D.stats.coverage||{}).map(([k,[a,u]])=>`<tr><td class="mono">${esc(k)}</td><td>${a?'yes':'<span class="muted">no</span>'}</td><td class="n">${(a||u).toLocaleString()}</td></tr>`).join('')}</table>
+ <p class="note">Events read: ${Object.entries(D.stats).filter(([k])=>k!=='coverage').map(([k,v])=>`${esc(k)} ${Number(v).toLocaleString()}`).join(' · ')}</p>`;
 </script></body></html>

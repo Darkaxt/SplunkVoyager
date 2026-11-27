@@ -278,6 +278,7 @@ def read_dump(case, log=print):
     if not dirs:
         raise SystemExit(f"No raw folders under {ed / 'seeds'}")
     events, seen, stats = [], set(), Counter()
+    coverage = defaultdict(lambda: [0, 0])          # sourcetype -> [events analysed, events not analysed]
     t0, last = time.time(), time.time()
     for i, d in enumerate(dirs, 1):
         meta = {}
@@ -298,6 +299,7 @@ def read_dump(case, log=print):
                     p = parser_for(st)
                     stats["read"] += 1
                     if not p or not raw:
+                        coverage[st or "(no sourcetype)"][1] += 1
                         continue
                     key = hashlib.blake2b(f"{st}\x00{r.get('host', '')}\x00{r.get('_time', '')}\x00{raw}".encode(
                         "utf-8", "surrogatepass"), digest_size=12).digest()
@@ -305,6 +307,7 @@ def read_dump(case, log=print):
                         stats["duplicates"] += 1
                         continue
                     seen.add(key)
+                    coverage[st][0] += 1
                     t = _epoch(r.get("_time"))
                     base = {"t": t, "sourcetype": st, "host": r.get("host", ""), "raw": raw[:2500]}
                     try:
@@ -319,6 +322,7 @@ def read_dump(case, log=print):
             last = time.time()
             log(f"Read {i}/{len(dirs)} folders, {stats['read']:,} events, {len(events):,} authentication / connection events")
     events.sort(key=lambda e: (e["t"] is None, e["t"] or 0))     # events without a readable time last
+    stats["coverage"] = {k: v for k, v in sorted(coverage.items())}
     return events, stats
 
 
