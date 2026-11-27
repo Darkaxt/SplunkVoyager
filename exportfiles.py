@@ -1,9 +1,11 @@
-"""Export folders: per-window part files while a run is going, one compressed export.zip once it is complete.
+"""Export folders: each finished window's part file is compressed into its own zip as soon as it is done
+(part-0001.jsonl -> part-0001.jsonl.zip), so loose files never pile up during a long run. Runs packed by older
+versions have one export.zip; both forms are read.
 
-Readers go through parts() / open_part() and don't care which form a folder is in (loose part files win over
-the same name inside the zip, e.g. a window re-downloaded with --retry-failed after packing).
+Readers go through parts() / open_part() and don't care which form a folder is in. Precedence for one name:
+loose part file (e.g. a window downloaded again with --retry-failed) > its own zip > export.zip.
 
-  python exportfiles.py pack FOLDER [FOLDER...]   pack every complete run found under the folders
+  python exportfiles.py pack FOLDER [FOLDER...]   compress the finished windows of every run under the folders
 """
 import argparse
 import glob
@@ -27,12 +29,24 @@ class Part:
     def open(self, newline=None, encoding="utf-8"):
         """Text stream of the part (utf-8-sig handled by the caller's encoding)."""
         if self._path:
-            return open(self._path, encoding=encoding, newline=newline)
+            if os.path.isfile(self._path) or not os.path.isfile(self._path + ".zip"):
+                return open(self._path, encoding=encoding, newline=newline)
+            self._zip = self._path + ".zip"      # compressed since it was listed
         z = zipfile.ZipFile(self._zip)
         raw = z.open(self.name)
         stream = io.TextIOWrapper(raw, encoding=encoding, newline=newline)
         stream._voyager_zip = z          # keep the archive open as long as the stream
         return stream
+
+
+def _part_zips(folder, ext):
+    for f in glob.glob(os.path.join(folder, f"part-*.{ext}.zip")):
+        member = os.path.basename(f)[:-4]
+        try:
+            with zipfile.ZipFile(f) as z:
+                yield member, z.getinfo(member).file_size, f
+        except (zipfile.BadZipFile, KeyError, OSError):
+            print(f"WARNING: {f} is damaged or not a part zip; skipped", file=sys.stderr)
 
 
 def parts(folder, ext):
@@ -48,6 +62,8 @@ def parts(folder, ext):
                         found[i.filename] = Part(i.filename, i.file_size, f"{zp}::{i.filename}", zip_path=zp)
         except zipfile.BadZipFile:
             print(f"WARNING: {zp} is damaged; reading only the loose part files", file=sys.stderr)
+    for member, size, f in _part_zips(folder, ext):
+        found[member] = Part(member, size, f"{f}::{member}", zip_path=f)
     for f in glob.glob(os.path.join(folder, f"part-*.{ext}")):
         n = os.path.basename(f)
         found[n] = Part(n, os.path.getsize(f), f, path=f)
@@ -56,6 +72,8 @@ def parts(folder, ext):
 
 def open_part(key, encoding="utf-8"):
     """Open a part by the key parts() gave it (a path, or 'zip::member')."""
+    if "::" not in key and not os.path.isfile(key) and os.path.isfile(key + ".zip"):
+        key = f"{key}.zip::{os.path.basename(key)}"   # compressed since it was listed
     if "::" in key and not os.path.isfile(key):
         zp, member = key.split("::", 1)
         return Part(member, 0, key, zip_path=zp).open(encoding=encoding)
@@ -66,51 +84,89 @@ def total_size(folder, ext):
     return sum(p.size for p in parts(folder, ext))
 
 
-def pack(folder, log=print):
-    """Move the loose part files of a complete run into export.zip (added to an existing one). Verified first."""
-    folder = Path(folder)
-    loose = sorted(folder.glob("part-*.*"))
-    loose = [p for p in loose if p.suffix in (".jsonl", ".csv")]
-    if not loose:
-        return 0
-    zp = folder / ZIP_NAME
-    tmp = folder / (ZIP_NAME + ".tmp")
-    before = sum(p.stat().st_size for p in loose)
-    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out:
-        names = {p.name for p in loose}
-        if zp.is_file():                   # keep what is already packed, except names being replaced
-            with zipfile.ZipFile(zp) as old:
-                for i in old.infolist():
-                    if i.filename not in names:
-                        out.writestr(i, old.read(i.filename))
-        for p in loose:
-            out.write(p, p.name)
-    with zipfile.ZipFile(tmp) as z:        # verify before deleting anything
-        bad = z.testzip()
-        sizes = {i.filename: i.file_size for i in z.infolist()}
-    if bad or any(sizes.get(p.name) != p.stat().st_size for p in loose):
-        tmp.unlink()
-        raise RuntimeError(f"packing {folder} failed verification; the part files were left as they are")
-    for i in range(40):                    # Windows: antivirus or an indexer may hold the file for a moment
+def pack_part(path, log=print):
+    """Compress one finished part file into <name>.zip next to it, verified, then remove the loose file.
+    Safe to call from several processes at once: the .tmp file is taken exclusively. Returns bytes saved or None."""
+    path = Path(path)
+    if not path.is_file():
+        return None
+    zp = path.with_name(path.name + ".zip")
+    tmp = path.with_name(path.name + ".zip.tmp")
+    try:
+        fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
         try:
-            os.replace(tmp, zp)
-            break
-        except PermissionError:
-            if i == 39:
-                tmp.unlink()
-                raise RuntimeError(f"{zp} is locked by another program; the part files were left as they are")
-            time.sleep(0.25)
-    left = []
-    for p in loose:
-        try:
-            p.unlink()
+            if time.time() - tmp.stat().st_mtime < 600:   # still being written
+                return None                # being packed by someone else
+            tmp.unlink()                   # left over by a crash
+            fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except OSError:
-            left.append(p.name)            # a verified copy is in the zip; removed by the next pack
-    if left:
-        log(f"{len(left)} part file(s) could not be removed yet (in use); they are already in {zp.name}")
+            return None
+    try:
+        size = path.stat().st_size
+        with os.fdopen(fd, "wb") as fh, zipfile.ZipFile(fh, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+            z.write(path, path.name)
+        with zipfile.ZipFile(tmp) as z:
+            if z.testzip() is not None or z.getinfo(path.name).file_size != size or path.stat().st_size != size:
+                raise RuntimeError(f"{zp.name} failed verification")
+        for i in range(40):                # Windows: antivirus or an indexer may hold the file for a moment
+            try:
+                os.replace(tmp, zp)
+                break
+            except PermissionError:
+                if i == 39:
+                    raise RuntimeError(f"{zp} is locked by another program")
+                time.sleep(0.25)
+    except BaseException as e:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        if isinstance(e, (RuntimeError, OSError, zipfile.BadZipFile)):
+            log(f"Could not compress {path.name} ({e}); it stays as it is")
+            return None
+        raise
+    for i in range(20):
+        try:
+            path.unlink()
+            break
+        except FileNotFoundError:
+            break
+        except OSError:                    # in use: the zip is complete and the loose copy wins until removed
+            time.sleep(0.25)
     after = zp.stat().st_size
-    log(f"Packed {len(loose)} part file(s) into {zp} ({before / 1e6:,.1f} MB -> {after / 1e6:,.1f} MB)")
-    return len(loose)
+    log(f"Compressed {path.name} ({size / 1e6:,.1f} MB -> {after / 1e6:,.1f} MB)")
+    return size - after
+
+
+def pack_done(folder, log=print):
+    """Compress the part files of every finished window of a run (retroactive for runs already under way)."""
+    folder = Path(folder)
+    try:
+        man = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    n = 0
+    for w in man.get("windows") or []:
+        if w.get("state") == "done" and w.get("file") and (folder / w["file"]).is_file():
+            n += pack_part(folder / w["file"], log) is not None
+    return n
+
+
+def sweep(root, log=print):
+    """pack_done for every export run under root (Voyager runs this periodically)."""
+    n = 0
+    for m in Path(root).rglob("manifest.json"):
+        if any(m.parent.glob("part-*.jsonl")) or any(m.parent.glob("part-*.csv")):
+            n += pack_done(m.parent, log)
+    return n
+
+
+def pack(folder, log=print):
+    """Compress all loose part files of a complete run, each into its own zip. Returns how many."""
+    folder = Path(folder)
+    loose = sorted(p for p in folder.glob("part-*.*") if p.suffix in (".jsonl", ".csv"))
+    return sum(pack_part(p, log) is not None for p in loose)
 
 
 def complete(folder):
@@ -126,22 +182,14 @@ def complete(folder):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("pack", help="pack complete export runs found under the given folders")
+    p = sub.add_parser("pack", help="compress the finished windows of the export runs under the given folders")
     p.add_argument("folders", nargs="+")
     a = ap.parse_args()
     runs = sorted({str(m.parent) for f in a.folders for m in Path(f).rglob("manifest.json")})
-    packed = skipped = 0
+    files = 0
     for r in runs:
-        if not complete(r):
-            if list(Path(r).glob("part-*.*")):
-                print(f"skipped (run not complete): {r}")
-                skipped += 1
-            continue
-        try:
-            packed += bool(pack(r))
-        except (RuntimeError, OSError, zipfile.BadZipFile) as e:
-            print(f"ERROR {r}: {e}")
-    print(f"{packed} run(s) packed, {skipped} incomplete run(s) left as they are")
+        files += pack_done(r)
+    print(f"{files} part file(s) compressed in {len(runs)} run(s)")
 
 
 if __name__ == "__main__":

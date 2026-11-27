@@ -115,10 +115,12 @@ python pivot_graph.py status cases\acct                                     # ra
 python pivot_graph.py build cases\acct cases\other -o combined.html          # several cases in one graph
 ```
 
-Each export run writes one part file per time window while it runs; when every window is done they are packed
-into one compressed `export.zip` in that folder (`--no-pack` keeps the part files). All the tools read either
-form. To pack runs from before this: `python exportfiles.py pack cases data\investigations` (runs that
-aren't complete are left alone).
+Each export run writes one part file per time window, and compresses it into its own zip as soon as that window
+is downloaded (`part-0001.jsonl` -> `part-0001.jsonl.zip`), so loose files never pile up during a long run
+(`--no-pack` keeps them loose). A resumed run first compresses the windows it finished before, and Voyager
+compresses the finished windows of every run under its investigations every two minutes, including runs still
+going with an older exporter. All the tools read loose parts, per-window zips and the single `export.zip` of
+earlier versions. By hand: `python exportfiles.py pack cases data\investigations` (finished windows only).
 
 A value already in a case keeps the time range of its first search; `seed ... --reset-range` searches it again
 with the new range. Each script has `--help`. The command-line tools use the default instance from the same settings
@@ -135,7 +137,7 @@ with the new range. Each script has `--help`. The command-line tools use the def
 | `splunk_export.py` | resumable, windowed Splunk export |
 | `network_feed.py` | query builder, window merge and findings between the export and Payload Analyzer |
 | `network_map.py`, `network_map_template.html` | attack map of a network run |
-| `exportfiles.py` | export folders as part files or `export.zip`; `pack` command |
+| `exportfiles.py` | export folders: part files, per-window zips or `export.zip`; `pack` command |
 | `pivot_graph.py`, `pivot_graph_template.html` | entity mapper |
 | `payload_analyzer/` | Payload Analyzer, unchanged copy (commit in `UPSTREAM_COMMIT`), standard library only |
 | `data/` | your local state: session cookies, settings, investigations. Never commit it |

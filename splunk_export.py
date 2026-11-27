@@ -690,6 +690,15 @@ def _run(args, sp):
             w["state"] = "running"
     man.save()
 
+    # each finished window is compressed into its own zip in the background, so loose files never pile up;
+    # windows finished before (also by older versions, or before a restart) are compressed first
+    packer = None
+    if not getattr(args, "no_pack", False):
+        import exportfiles
+        from concurrent.futures import ThreadPoolExecutor
+        packer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pack")
+        packer.submit(exportfiles.pack_done, man.dir, log)
+
     warned_trunc = set(n for w in man.windows for n in w.get("notes", []) if "subsearch" in n.lower())
     last_status = 0
     next_submit, refused_logged = 0, False
@@ -766,6 +775,8 @@ def _run(args, sp):
                 man.save()
                 next_submit = 0  # a slot on Splunk is free again
                 log(f"Window {w['n']}: saved {w['records']:,} records to {w['file']}")
+                if packer:
+                    packer.submit(exportfiles.pack_part, man.dir / w["file"], log)
                 if not args.keep_jobs:
                     sp.control(w["sid"], "cancel")  # free disk quota on Splunk
 
@@ -788,6 +799,8 @@ def _run(args, sp):
             log(f"Network problem ({type(e).__name__}); laptop asleep or VPN down? Retrying in 30s...")
             time.sleep(30)
 
+    if packer:
+        packer.shutdown(wait=True)      # finish compressing before reporting, merging or the next step reads them
     summarize(man, sp, final=True)
     failed = [w for w in man.windows if w["state"] == "failed"]
     if failed:
@@ -797,15 +810,10 @@ def _run(args, sp):
     if args.merge:
         merge(man, fmt)
     files = [w["file"] for w in sorted(man.windows, key=lambda w: w["earliest"]) if w["file"]]
-    if files and not getattr(args, "no_pack", False):
-        try:
-            import exportfiles
-            exportfiles.pack(man.dir, log)
-        except Exception as e:      # never lose a finished run over packing: the part files stay
-            log(f"Could not pack the part files ({e}); they stay as they are")
     if files and not args.merge:
-        log(f"Results are in {man.dir} ({files[0]} = earliest window"
-            f"{', inside export.zip' if (man.dir / 'export.zip').exists() else ''}). Add --merge for a single file.")
+        z = (man.dir / (files[0] + ".zip")).exists()
+        log(f"Results are in {man.dir} ({files[0]}{'.zip' if z else ''} = earliest window). "
+            f"Add --merge for a single file.")
 
 
 def retry_or_fail(w, args, why):

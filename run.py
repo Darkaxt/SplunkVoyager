@@ -184,6 +184,19 @@ def start_application(open_browser=True):
     if open_browser:
         threading.Thread(target=open_browser_when_ready, daemon=True).start()
     threading.Thread(target=confirm_when_ready, daemon=True).start()
+    def compress_finished_windows():
+        """Export runs started by an older exporter (still running) get their finished windows compressed here."""
+        import time as _t
+        import exportfiles
+        from app.services.workbench import INV_ROOT
+        while True:
+            try:
+                if INV_ROOT.is_dir():
+                    exportfiles.sweep(INV_ROOT, logger.info)
+            except Exception as e:
+                logger.error(f"Compressing finished export windows: {e}")
+            _t.sleep(120)
+    threading.Thread(target=compress_finished_windows, daemon=True, name="packer").start()
     try:
         import updater
         import voyager_settings

@@ -123,7 +123,7 @@ def read_export(export_dir):
     import exportfiles
     files = exportfiles.parts(export_dir, "jsonl")
     if not files:
-        raise SystemExit(f"No part-*.jsonl files (or export.zip) in {export_dir}")
+        raise SystemExit(f"No part files (part-*.jsonl, part-*.jsonl.zip or export.zip) in {export_dir}")
     for f in files:
         with f.open() as fh:
             for line in fh:

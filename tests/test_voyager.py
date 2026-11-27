@@ -155,38 +155,71 @@ class WebAppTest(unittest.TestCase):
 
 
 class ExportFilesTest(unittest.TestCase):
+    def write_parts(self, d, n=3):
+        for i in range(1, n + 1):
+            (d / f"part-{i:04d}.jsonl").write_text(f'{{"n": {i}, "_raw": "{"x" * 500}"}}\n' * 50)
+
     def test_pack_read_and_replace(self):
         import exportfiles
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            for i in (1, 2, 3):
-                (d / f"part-{i:04d}.jsonl").write_text(f'{{"n": {i}, "_raw": "{"x" * 500}"}}\n' * 50)
-            (d / "manifest.json").write_text(json.dumps({"windows": [{"state": "done"}] * 3}))
+            self.write_parts(d)
+            key = str(d / "part-0003.jsonl")                    # e.g. a sample pointer kept by an entity graph
             self.assertEqual(exportfiles.pack(d, log=lambda m: None), 3)
-            self.assertEqual(sorted(p.name for p in d.iterdir()), ["export.zip", "manifest.json"])
-            self.assertLess((d / "export.zip").stat().st_size, 3 * 50 * 520 / 5)       # compressed
+            self.assertEqual(sorted(p.name for p in d.iterdir()),
+                             ["part-0001.jsonl.zip", "part-0002.jsonl.zip", "part-0003.jsonl.zip"])
+            self.assertLess((d / "part-0001.jsonl.zip").stat().st_size, 50 * 520 / 5)     # compressed
             got = [p.name for p in exportfiles.parts(d, "jsonl")]
             self.assertEqual(got, ["part-0001.jsonl", "part-0002.jsonl", "part-0003.jsonl"])
-            # a window downloaded again after packing (--retry-failed) wins over the packed copy, then is packed in
+            with exportfiles.open_part(key) as fh:             # pointers to the loose file still work
+                self.assertEqual(json.loads(fh.readline())["n"], 3)
+            # a window downloaded again (--retry-failed) wins over the compressed copy, then replaces it
             (d / "part-0002.jsonl").write_text('{"n": 22}\n')
             with [p for p in exportfiles.parts(d, "jsonl") if p.name == "part-0002.jsonl"][0].open() as fh:
                 self.assertEqual(fh.read(), '{"n": 22}\n')
             exportfiles.pack(d, log=lambda m: None)
-            with exportfiles.open_part(str(d / "export.zip") + "::part-0002.jsonl") as fh:
+            with exportfiles.open_part(str(d / "part-0002.jsonl.zip") + "::part-0002.jsonl") as fh:
                 self.assertEqual(fh.read(), '{"n": 22}\n')
             self.assertEqual(len(exportfiles.parts(d, "jsonl")), 3)
+            # runs packed by older versions (one export.zip) are still read; per-window zips win over it
+            import zipfile
+            with zipfile.ZipFile(d / "export.zip", "w") as z:
+                z.writestr("part-0001.jsonl", '{"n": "old"}\n')
+                z.writestr("part-0004.jsonl", '{"n": 4}\n')
+            ps = {p.name: p for p in exportfiles.parts(d, "jsonl")}
+            self.assertEqual(sorted(ps), ["part-0001.jsonl", "part-0002.jsonl", "part-0003.jsonl", "part-0004.jsonl"])
+            with ps["part-0001.jsonl"].open() as fh:
+                self.assertEqual(json.loads(fh.readline())["n"], 1)
 
-    def test_pack_command_skips_incomplete_runs(self):
+    def test_only_finished_windows_and_one_packer_at_a_time(self):
+        import exportfiles
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            self.write_parts(d)
+            (d / "manifest.json").write_text(json.dumps({"windows": [
+                {"state": "done", "file": "part-0001.jsonl"}, {"state": "downloading", "file": "part-0002.jsonl"},
+                {"state": "done", "file": "part-0003.jsonl"}]}))
+            (d / "part-0003.jsonl.zip.tmp").write_text("")      # another process is compressing it
+            self.assertEqual(exportfiles.sweep(d, log=lambda m: None), 1)
+            self.assertEqual(sorted(p.name for p in d.glob("part-*")),
+                             ["part-0001.jsonl.zip", "part-0002.jsonl", "part-0003.jsonl", "part-0003.jsonl.zip.tmp"])
+            old = time.time() - 3600                            # a crash left it: taken over
+            os.utime(d / "part-0003.jsonl.zip.tmp", (old, old))
+            self.assertEqual(exportfiles.pack_done(d, log=lambda m: None), 1)
+            self.assertTrue((d / "part-0003.jsonl.zip").is_file())
+            self.assertFalse((d / "part-0003.jsonl.zip.tmp").exists())
+
+    def test_pack_command(self):
         with tempfile.TemporaryDirectory() as d:
             for name, state in (("done", "done"), ("busy", "running")):
                 r = Path(d, "case", name)
                 r.mkdir(parents=True)
                 (r / "part-0001.csv").write_text("a,b\n1,2\n")
-                (r / "manifest.json").write_text(json.dumps({"windows": [{"state": state}]}))
+                (r / "manifest.json").write_text(json.dumps({"windows": [{"state": state, "file": "part-0001.csv"}]}))
             out = subprocess.run([sys.executable, str(ROOT / "exportfiles.py"), "pack", str(Path(d, "case"))],
                                  capture_output=True, text=True).stdout
-            self.assertIn("1 run(s) packed, 1 incomplete", out)
-            self.assertTrue(Path(d, "case", "done", "export.zip").is_file())
+            self.assertIn("1 part file(s) compressed in 2 run(s)", out)
+            self.assertTrue(Path(d, "case", "done", "part-0001.csv.zip").is_file())
             self.assertTrue(Path(d, "case", "busy", "part-0001.csv").is_file())
 
 
@@ -390,15 +423,15 @@ class EndToEndTest(unittest.TestCase):
         for v in ("198.51.100.23", "cb.attacker.example"):
             self.run_py("pivot_graph.py", "seed", case, v, "--earliest", "1792454400", "--latest", "1792713600",
                         "--poll", "1")
-        self.assertFalse(list(case.rglob("part-*")))            # finished runs are packed
-        self.assertTrue(list(case.rglob("export.zip")))
+        self.assertFalse([p for p in case.rglob("part-*") if p.suffix != ".zip"])   # every window compressed
+        self.assertTrue(list(case.rglob("part-*.zip")))
         self.run_py("pivot_graph.py", "build", case, "-o", case / "graph.html", "--bin", "1")
         html = (case / "graph.html").read_text(encoding="utf-8")
         # the same graph from loose part files (unpacked) as from the zips
         import zipfile
         loose = Path(self.tmp.name, "case_loose")
         shutil.copytree(case, loose)
-        for z in loose.rglob("export.zip"):
+        for z in loose.rglob("part-*.zip"):
             with zipfile.ZipFile(z) as zz:
                 zz.extractall(z.parent)
             z.unlink()
