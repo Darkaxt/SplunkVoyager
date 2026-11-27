@@ -129,7 +129,9 @@ def get_investigation(slug):
     inv["entities"] = {"seeds": [{"value": s["value"], "earliest": s.get("earliest"), "latest": s.get("latest")}
                                  for s in case.get("seeds", [])],
                        "graph": (ed / "graph.html").is_file() and "entities/graph.html",
-                       "csv": (ed / "graph_entities.csv").is_file() and "entities/graph_entities.csv"}
+                       "csv": (ed / "graph_entities.csv").is_file() and "entities/graph_entities.csv",
+                       "auth": (ed / "auth_report.html").is_file() and "entities/auth_report.html",
+                       "auth_csv": (ed / "auth_events.csv").is_file() and "entities/auth_events.csv"}
     return inv
 
 
@@ -534,6 +536,20 @@ def start_entities(slug, values, earliest=None, latest=None, include="", max_eve
     title = title.strip() or ("Map " + ", ".join(values))[:100]
     jid = _new_job(d, "entities", title, steps, lock="entities",
                    meta={"values": values, "earliest": earliest, "latest": latest})
+    _spawn(d / "jobs" / jid)
+    return jid
+
+
+def start_auth(slug):
+    """Authentication analysis of the entity mapper's dump (failed / locked / successful logons)."""
+    d = inv_dir(slug)
+    ed = d / "entities"
+    if not (ed / "seeds").is_dir():
+        raise ValueError("no entity searches yet")
+    title = _read(d / "investigation.json", {}).get("name", "") or slug
+    step = {"name": "Authentication analysis", "argv": [PY, str(ROOT / "auth_analysis.py"), str(d),
+                                                        "-o", str(ed / "auth_report.html"), "--title", f"{title}: authentication"]}
+    jid = _new_job(d, "entities", "Authentication analysis", [step], lock="entities")
     _spawn(d / "jobs" / jid)
     return jid
 

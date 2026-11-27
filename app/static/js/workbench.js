@@ -205,6 +205,11 @@ const WB = (() => {
     }
     $('#em-run').onclick = () => mapValues($('#em-values').value.split('\n').map(s => s.trim()).filter(Boolean), $('#em-run'))
       .then(ok => { $('#em-run').disabled = false; $('#em-run').textContent = 'Search and map'; if (ok) $('#em-values').value = ''; });
+    $('#em-auth').onclick = async () => {
+      $('#em-auth').disabled = true;
+      try { await api(`${base}/entities/auth`, {}); refresh(); } catch (err) { alert(err.message); }
+      $('#em-auth').disabled = false;
+    };
     $('#em-rebuild').onclick = async () => {
       $('#em-err').textContent = '';
       try { await api(`${base}/entities/build`, {bin: $('#em-bin').value, group: $('#em-group').value}); refresh(); }
@@ -298,9 +303,12 @@ const WB = (() => {
       const e = inv.entities;
       let h = e.seeds.length ? e.seeds.map(s => `<span class="pill mono" title="searched ${esc(s.earliest)} → ${esc(s.latest || 'now')}">${esc(s.value)}
         <span class="muted">${esc(s.earliest)} → ${esc(s.latest || 'now')}</span></span>`).join('') : '<div class="empty">Nothing yet.</div>';
-      if (e.graph) h += `<div class="actions" style="margin-top:6px"><a class="b" target="_blank" href="/inv/${slug}/files/${esc(e.graph)}">Open graph</a>
-        ${e.csv ? `<a class="b" href="/inv/${slug}/files/${esc(e.csv)}">All entities (CSV)</a>` : ''}</div>`;
+      if (e.graph || e.auth) h += `<div class="actions" style="margin-top:6px">${e.graph ? `<a class="b" target="_blank" href="/inv/${slug}/files/${esc(e.graph)}">Open graph</a>` : ''}
+        ${e.csv ? `<a class="b" href="/inv/${slug}/files/${esc(e.csv)}">All entities (CSV)</a>` : ''}
+        ${e.auth ? `<a class="b" target="_blank" href="/inv/${slug}/files/${esc(e.auth)}">Open auth report</a>` : ''}
+        ${e.auth_csv ? `<a class="b" href="/inv/${slug}/files/${esc(e.auth_csv)}">Auth events (CSV)</a>` : ''}</div>`;
       $('#em-rebuild').disabled = !e.seeds.length;
+      $('#em-auth').disabled = !e.seeds.length;
       return h;
     }
 

@@ -245,6 +245,15 @@ def api_rebuild(slug):
         return _err(e)
 
 
+@workbench_bp.route("/api/inv/<slug>/entities/auth", methods=["POST"])
+def api_auth(slug):
+    _json()
+    try:
+        return jsonify({"status": "started", "job": wb.start_auth(slug)})
+    except (ValueError, FileNotFoundError) as e:
+        return _err(e)
+
+
 @workbench_bp.route("/api/inv/<slug>/jobs/<jid>/<action>", methods=["POST"])
 def api_job_action(slug, jid, action):
     body = _json()

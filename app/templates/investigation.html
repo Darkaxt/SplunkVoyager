@@ -99,6 +99,7 @@
       <div class="actions">
         <button class="primary" id="em-run">Search and map</button>
         <button id="em-rebuild" {% if not inv.entities.seeds %}disabled{% endif %}>Rebuild graph</button>
+        <button id="em-auth" {% if not inv.entities.seeds %}disabled{% endif %} title="Failed, locked and successful logons in the mapped values' raw events (Oracle audit, listener and alert logs, Windows Security, Linux auth)">Auth analysis</button>
         <span class="err" id="em-err"></span>
       </div>
       <h3>Mapped so far</h3>

@@ -126,6 +126,18 @@ stopped, without repeating finished windows.
 
 ## Command line
 
+**Authentication analysis.** *Auth analysis* (entity mapper) reads the raw events the entity mapper exported
+and reports failed, locked and successful logons: per account and target (invalid credentials, lockouts,
+first and last failure, first lockout, success after failure / after the lockout, sources, client OS users,
+database links, each event with its raw evidence), per source (accounts tried, accounts with failures, most
+failures on one account, peak in 10 minutes), an hourly timeline, listener connections, outbound connection
+failures and alert-log logons. Parsed: `oracle:audit:db` LOGON rows, `oracle:audit:text` CONNECT records
+(length-prefixed fields, so SQL text is never mistaken for a status), `oracle:listener:xml`, `oracle:alert:xml`,
+Windows Security 4624/4625/4648/4740/4771/4776, Linux sshd / pam / faillock. An event exported under several
+mapped values counts once. Output: `entities/auth_report.html` and `entities/auth_events.csv`; by hand:
+`python auth_analysis.py data\investigations\<case>`. `python auth_samples.py <case>` picks a few raw events
+per sourcetype to look at a dump's formats.
+
 **Large exports.** The merge of the time windows keeps its memory bounded however big the export is: above
 300,000 rows it spreads the rows over compressed buckets beside the output (about 40 bytes per row) and
 aggregates one bucket at a time, in up to 4 processes, logging progress and the time left. The merged
@@ -167,6 +179,8 @@ with the new range. Each script has `--help`. The command-line tools use the def
 | `splunk_export.py` | resumable, windowed Splunk export |
 | `network_feed.py` | query builder, window merge and findings between the export and Payload Analyzer |
 | `network_map.py`, `network_map_template.html` | attack map of a network run |
+| `auth_analysis.py` | authentication analysis of an entity-mapper dump (+ `auth_report_template.html`) |
+| `auth_samples.py` | sample raw events per sourcetype from a dump |
 | `credentials.py` | credentials in request URLs: scan, credentials.jsonl, report section |
 | `blocklist.py` | global blocklist for the findings lists |
 | `exportfiles.py` | export folders: part files, per-window zips or `export.zip`; `pack` command |

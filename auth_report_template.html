@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--fg:#1c2330;--muted:#5d6878;--line:#dde2e8;--th:#eef1f5;--hover:#f2f5fa;--ok:#2e8b57;--bad:#c0392b;--lock:#8e44ad;--exp:#d68910;--oth:#7f8c8d;--accent:#2f6fde}
+@media (prefers-color-scheme:dark){:root{--bg:#14171c;--panel:#1c2027;--fg:#e4e8ee;--muted:#98a2b1;--line:#2d333d;--th:#232831;--hover:#232a35;--ok:#4cc38a;--bad:#ff6b5e;--lock:#c08cff;--exp:#f5b041;--oth:#9aa4ad;--accent:#6ea1ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 22px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+header h1{font-size:17px;margin:0 12px 0 0}header a{color:var(--accent);text-decoration:none;font-size:13px}
+main{max-width:1600px;margin:0 auto;padding:16px 22px 60px}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:0 0 16px}
+h2{font-size:16px;margin:0 0 8px}.note{color:var(--muted);margin:0 0 10px}
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 4px}.card{border:1px solid var(--line);border-radius:6px;padding:8px 12px;min-width:130px}
+.card b{display:block;font-size:20px}.card span{color:var(--muted);font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:5px 7px;text-align:left;vertical-align:top}
+th{background:var(--th);font-weight:600;position:sticky;top:52px;cursor:pointer;white-space:nowrap;user-select:none}th.s-asc::after{content:" ▲"}th.s-desc::after{content:" ▼"}
+td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.mono{font-family:Consolas,Menlo,monospace;font-size:12.5px;word-break:break-word}
+tr.row{cursor:pointer}tr.row:hover td{background:var(--hover)}tr.det td{background:var(--hover)}
+.r-success{color:var(--ok)}.r-invalid{color:var(--bad)}.r-locked{color:var(--lock)}.r-expired{color:var(--exp)}.r-other{color:var(--oth)}
+.pill{display:inline-block;padding:0 7px;border-radius:9px;border:1px solid currentColor;font-size:12px;white-space:nowrap}
+.tools{display:flex;gap:10px;align-items:center;margin:0 0 8px}.tools input{flex:0 1 340px;padding:5px 8px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--fg)}
+.tools span{color:var(--muted);font-size:12px}button{font:inherit;font-size:12px;padding:3px 9px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--fg);cursor:pointer}
+pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font:12px/1.4 Consolas,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px;max-height:280px;overflow:auto}
+details summary{cursor:pointer;color:var(--accent);font-size:12px}.muted{color:var(--muted)}
+.legend span{margin-right:14px;font-size:12px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+svg text{fill:var(--muted);font-size:11px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:2px 14px;margin:4px 0 8px}.kv dt{color:var(--muted)}.kv dd{margin:0}
+</style></head><body>
+<header><h1 id="title"></h1>
+<a href="#s-sum">Summary</a><a href="#s-time">Timeline</a><a href="#s-acc">Accounts</a><a href="#s-src">Sources</a>
+<a href="#s-conn">Listener connections</a><a href="#s-out">Outbound failures</a><a href="#s-alert">Alert-log logons</a><a href="#s-codes">Codes</a></header>
+<main>
+<section id="s-sum"><h2>Summary</h2><p class="note" id="sum-note"></p><div class="cards" id="cards"></div><div class="note" id="sum-st"></div></section>
+<section id="s-time"><h2>Logon attempts per hour (UTC)</h2><div class="legend" id="legend"></div><div id="timeline"></div></section>
+<section id="s-acc"><h2>Accounts</h2><p class="note">One row per account and target. "Success after failure": the first successful logon at or after the first failure of that account on that target. Click a row for its events and the raw evidence.</p><div id="acc"></div></section>
+<section id="s-src"><h2>Sources</h2><p class="note">Source address (or client host when the address is not logged). "Peak in 10 min": most failures from that source within any 10 minutes. "Most failures on one account": the highest failure count of a single account from that source.</p><div id="src"></div></section>
+<section id="s-conn"><h2>Listener connections</h2><p class="note">From the listener logs: connection requests, not authentications. The client user and program are those the client reported.</p><div id="conn"></div></section>
+<section id="s-out"><h2>Outbound connection failures</h2><p class="note">From the alert logs: connections the logging host failed to open to other databases ("Fatal NI connect error").</p><div id="out"></div></section>
+<section id="s-alert"><h2>Alert-log logons</h2><p class="note">"logon successful" blocks of the alert logs, listed as written (not counted with the audit logons above).</p><div id="alert"></div></section>
+<section id="s-codes"><h2>Codes and parsing</h2><div id="codes"></div></section>
+</main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent), F=D.facts;
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad=n=>String(n).padStart(2,'0'), ts=t=>{if(t==null)return'';const d=new Date(t*1000);return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`};
+const n=v=>v?Number(v).toLocaleString():'<span class="muted">0</span>';
+const RES=['invalid credentials','locked','expired','other failure','success'], RC={'success':'r-success','invalid credentials':'r-invalid','locked':'r-locked','expired':'r-expired','other failure':'r-other'};
+const COL={'success':'--ok','invalid credentials':'--bad','locked':'--lock','expired':'--exp','other failure':'--oth'};
+const res=r=>`<span class="pill ${RC[r]||''}">${esc(r)}</span>`;
+document.title=D.title; $('#title').textContent=D.title;
+
+// summary
+const T=F.totals, fails=(T['invalid credentials']||0)+(T.locked||0)+(T.expired||0)+(T['other failure']||0);
+$('#sum-note').textContent=F.logons?`${F.logons.toLocaleString()} logon attempts from ${ts(F.first)} to ${ts(F.last)} UTC, on ${F.accounts.length.toLocaleString()} account/target pairs from ${F.sources.length.toLocaleString()} sources. Generated ${D.generated} UTC.`:'No logon events were found in the dump.';
+$('#cards').innerHTML=[['failed logons',fails],...RES.map(r=>[r,T[r]||0]),['accounts with a lockout',F.accounts.filter(a=>a.locked).length],['accounts with success after failure',F.accounts.filter(a=>a.success_after_failure!=null&&a.attempts>a.success).length]]
+ .map(([k,v])=>`<div class="card"><b class="${RC[k]||''}">${Number(v).toLocaleString()}</b><span>${esc(k)}</span></div>`).join('');
+$('#sum-st').textContent='Logons by log: '+Object.entries(F.by_sourcetype).map(([k,v])=>`${k} ${v.toLocaleString()}`).join(' · ');
+
+// timeline: stacked bars per hour
+(function(){
+  const H=F.hourly; if(!H.length){$('#timeline').innerHTML='<p class="muted">No data.</p>';return;}
+  $('#legend').innerHTML=RES.map(r=>`<span><i style="background:var(${COL[r]})"></i>${esc(r)}</span>`).join('');
+  const t0=H[0][0], t1=H[H.length-1][0], hours=(t1-t0)/3600+1, W=Math.max(900,Math.min(hours*6,4000)), Hh=180, L=46, B=22;
+  const max=Math.max(...H.map(([,c])=>Object.values(c).reduce((a,b)=>a+b,0))), bw=Math.max(1,(W-L)/hours-0.5);
+  let s=`<svg viewBox="0 0 ${W} ${Hh+B}" width="100%" style="min-width:${Math.min(W,1400)}px;max-height:260px">`;
+  for(let i=0;i<=4;i++){const y=Hh-(Hh-10)*i/4;s+=`<line x1="${L}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${L-6}" y="${y+4}" text-anchor="end">${Math.round(max*i/4).toLocaleString()}</text>`;}
+  for(const [h,c] of H){const x=L+(h-t0)/3600*(W-L)/hours;let y=Hh;
+    for(const r of RES){const v=c[r]||0;if(!v)continue;const hh=(Hh-10)*v/max;y-=hh;s+=`<rect x="${x}" y="${y}" width="${bw}" height="${hh}" fill="var(${COL[r]})"><title>${ts(h).slice(0,13)}:00 UTC · ${r}: ${v}</title></rect>`;}}
+  const days=Math.ceil(hours/24), step=Math.max(1,Math.ceil(days/14));
+  for(let d=0;d<=days;d+=step){const h=Math.floor(t0/86400)*86400+d*86400;if(h<t0)continue;const x=L+(h-t0)/3600*(W-L)/hours;s+=`<line x1="${x}" x2="${x}" y1="0" y2="${Hh}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${x+2}" y="${Hh+15}">${ts(h).slice(0,10)}</text>`;}
+  $('#timeline').innerHTML=s+'</svg>';
+})();
+
+// generic sortable, filterable table with optional expandable rows
+function table(host,rows,cols,detail,limit=300){
+  let sort=null,dir=-1,q='',all=false; const el=document.getElementById(host);
+  function draw(){
+    let rs=rows.filter(r=>!q||cols.some(c=>String(c.text?c.text(r):r[c.k]??'').toLowerCase().includes(q)));
+    if(sort){const c=cols[sort],v=r=>c.sort?c.sort(r):(c.text?c.text(r):r[c.k]);rs=[...rs].sort((a,b)=>{const x=v(a),y=v(b);return (x>y?1:x<y?-1:0)*dir;});}
+    const shown=all?rs:rs.slice(0,limit);
+    el.innerHTML=`<div class="tools"><input placeholder="filter..." value="${esc(q)}"><span>${rs.length.toLocaleString()} rows${rs.length>shown.length?`, ${shown.length} shown`:''}</span>${rs.length>limit?`<button class="all">${all?'Show '+limit:'Show all'}</button>`:''}</div>
+    <table><tr>${cols.map((c,i)=>`<th data-i="${i}" class="${sort===i?(dir>0?'s-asc':'s-desc'):''}">${esc(c.h)}</th>`).join('')}</tr>
+    ${shown.map((r,i)=>`<tr class="${detail?'row':''}" data-i="${rows.indexOf(r)}">${cols.map(c=>`<td class="${c.cls||''}">${c.f?c.f(r):esc(r[c.k])}</td>`).join('')}</tr>`).join('')}</table>`;
+    const inp=el.querySelector('input'); inp.oninput=()=>{q=inp.value.toLowerCase();draw();const i2=el.querySelector('input');i2.focus();i2.setSelectionRange(q.length,q.length);};
+    const b=el.querySelector('.all'); if(b) b.onclick=()=>{all=!all;draw();};
+    el.querySelectorAll('th').forEach(th=>th.onclick=()=>{const i=+th.dataset.i;dir=sort===i?-dir:-1;sort=i;draw();});
+    if(detail) el.querySelectorAll('tr.row').forEach(tr=>tr.onclick=()=>{const nx=tr.nextElementSibling;
+      if(nx&&nx.classList.contains('det')){nx.remove();return;}
+      const d=document.createElement('tr');d.className='det';d.innerHTML=`<td colspan="${cols.length}">${detail(rows[+tr.dataset.i])}</td>`;tr.after(d);});
+  }
+  draw();
+}
+const evRow=e=>`<tr><td class="mono">${ts(e.t)}</td><td>${res(e.result)}</td><td class="mono">${esc(e.code)} ${esc(e.meaning)}</td><td class="mono">${esc(e.src_ip||'')}${e.src_port?':'+esc(e.src_port):''}${e.src_host?' ('+esc(e.src_host)+')':''}</td><td class="mono">${esc(e.os_user)}${e.program?' · '+esc(e.program):''}${e.privilege?' · '+esc(e.privilege):''}</td><td class="mono">${esc(e.via)}</td><td><details><summary>raw (${esc(e.sourcetype)})</summary><pre>${esc(e.raw)}</pre></details></td></tr>`;
+const evTable=evs=>`<table><tr><th>Time (UTC)</th><th>Result</th><th>Code</th><th>Source</th><th>Client user / program</th><th>Via</th><th>Evidence</th></tr>${evs.map(evRow).join('')}</table>`;
+
+table('acc',F.accounts,[
+ {h:'Account',k:'account',cls:'mono'},{h:'Target',k:'target',cls:'mono'},{h:'Target host',k:'target_host',cls:'mono'},
+ {h:'Attempts',k:'attempts',cls:'n',f:r=>n(r.attempts)},{h:'Invalid credentials',k:'invalid credentials',cls:'n r-invalid',f:r=>n(r['invalid credentials'])},
+ {h:'Locked',k:'locked',cls:'n r-locked',f:r=>n(r.locked)},{h:'Expired',k:'expired',cls:'n',f:r=>n(r.expired)},{h:'Other failure',k:'other failure',cls:'n',f:r=>n(r['other failure'])},
+ {h:'Success',k:'success',cls:'n r-success',f:r=>n(r.success)},
+ {h:'First failure',k:'first_failure',cls:'mono',f:r=>ts(r.first_failure)},{h:'Last failure',k:'last_failure',cls:'mono',f:r=>ts(r.last_failure)},
+ {h:'First locked',k:'first_locked',cls:'mono',f:r=>ts(r.first_locked)},
+ {h:'Success after failure',k:'success_after_failure',cls:'mono r-success',f:r=>r.attempts>r.success?ts(r.success_after_failure):''},
+ {h:'Success after lock',k:'success_after_lock',cls:'mono',f:r=>ts(r.success_after_lock)},
+ {h:'Sources',text:r=>r.sources.map(s=>s[0]).join(' '),cls:'mono',f:r=>r.sources.slice(0,3).map(s=>`${esc(s[0])} <span class="muted">${s[1]}</span>`).join('<br>')+(r.sources.length>3?`<br><span class="muted">+${r.sources.length-3}</span>`:'')}],
+ a=>`<dl class="kv"><dt>Codes</dt><dd class="mono">${a.codes.map(([c,k])=>`${esc(c)} <span class="muted">×${k}</span>`).join('<br>')}</dd>
+   <dt>Sources</dt><dd class="mono">${a.sources.map(([s,k])=>`${esc(s)} <span class="muted">×${k}</span>`).join('<br>')}</dd>
+   ${a.os_users.length?`<dt>Client OS users</dt><dd class="mono">${a.os_users.map(([s,k])=>`${esc(s)} ×${k}`).join(', ')}</dd>`:''}
+   ${a.via.length?`<dt>Via</dt><dd class="mono">${a.via.map(([s,k])=>`${esc(s)} ×${k}`).join('<br>')}</dd>`:''}</dl>
+   <div class="muted" style="font-size:12px">Failures (first 30) and successes (first 5) of this account on this target:</div>${evTable(a.events)}`);
+
+table('src',F.sources,[
+ {h:'Source',k:'source',cls:'mono'},{h:'Client hosts',text:r=>r.hosts.join(' '),cls:'mono',f:r=>esc(r.hosts.slice(0,3).join(', '))},
+ {h:'Failures',k:'failures',cls:'n r-invalid',f:r=>n(r.failures)},{h:'Invalid credentials',k:'invalid credentials',cls:'n',f:r=>n(r['invalid credentials'])},
+ {h:'Locked',k:'locked',cls:'n r-locked',f:r=>n(r.locked)},{h:'Success',k:'success',cls:'n r-success',f:r=>n(r.success)},
+ {h:'Accounts tried',k:'accounts',cls:'n',f:r=>n(r.accounts)},{h:'Accounts with failures',k:'failed_accounts',cls:'n',f:r=>n(r.failed_accounts)},
+ {h:'Most failures on one account',k:'max_per_account',cls:'n',f:r=>n(r.max_per_account)},{h:'Targets',k:'targets',cls:'n',f:r=>n(r.targets)},
+ {h:'Peak in 10 min',k:'peak_10min',cls:'n',f:r=>n(r.peak_10min)},{h:'First',k:'first',cls:'mono',f:r=>ts(r.first)},{h:'Last',k:'last',cls:'mono',f:r=>ts(r.last)}],
+ s=>`<dl class="kv"><dt>Targets</dt><dd class="mono">${s.target_list.map(esc).join('<br>')}</dd></dl>`);
+
+table('conn',F.connections,[
+ {h:'Source address',k:'src_ip',cls:'mono'},{h:'Client host',k:'src_host',cls:'mono'},{h:'Client user',k:'user',cls:'mono'},{h:'Program',k:'program',cls:'mono'},
+ {h:'Service',k:'service',cls:'mono'},{h:'Listener',k:'listener',cls:'mono'},{h:'Connections',k:'count',cls:'n',f:r=>n(r.count)},
+ {h:'Results',text:r=>r.results.map(x=>x[0]).join(' '),cls:'mono',f:r=>r.results.map(([c,k])=>`${esc(c)} <span class="muted">×${k}</span>`).join('<br>')},
+ {h:'First',k:'first',cls:'mono',f:r=>ts(r.first)},{h:'Last',k:'last',cls:'mono',f:r=>ts(r.last)}]);
+table('out',F.outbound,[
+ {h:'From host',k:'from',cls:'mono'},{h:'To',k:'to',cls:'mono'},{h:'Service / SID',k:'service',cls:'mono'},{h:'Error',k:'error',cls:'mono'},
+ {h:'Count',k:'count',cls:'n',f:r=>n(r.count)},{h:'First',k:'first',cls:'mono',f:r=>ts(r.first)},{h:'Last',k:'last',cls:'mono',f:r=>ts(r.last)}]);
+table('alert',F.alert_logons,[
+ {h:'Time (UTC)',k:'t',cls:'mono',f:r=>ts(r.t)},{h:'Database',k:'target',cls:'mono'},{h:'Host',k:'target_host',cls:'mono'},{h:'DB user',k:'account',cls:'mono'},
+ {h:'Result',k:'meaning'},{h:'Remote machine',k:'src_host',cls:'mono'},{h:'Client IP',k:'src_ip',cls:'mono'},{h:'OS user',k:'os_user',cls:'mono'},{h:'Program',k:'program',cls:'mono'}]);
+
+$('#codes').innerHTML=`<dl class="kv">${Object.entries(D.ora).map(([c,m])=>`<dt class="mono">ORA-${c.padStart(5,'0')}</dt><dd>${esc(m)}</dd>`).join('')}</dl>
+ <p class="note">Result groups: success = 0 or 28002 (logon with a password-expiry warning); invalid credentials = 1017, Windows 0xC000006A/0xC0000064/0xC000006D, sshd Failed / Invalid user; locked = 28000, Windows 4740 / 0xC0000234, faillock; expired = 28001; other failure = any other code.</p>
+ <p class="note">Events read: ${Object.entries(D.stats).map(([k,v])=>`${esc(k)} ${Number(v).toLocaleString()}`).join(' · ')}</p>`;
+</script></body></html>

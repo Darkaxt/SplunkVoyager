@@ -287,6 +287,45 @@ class ExportFilesTest(unittest.TestCase):
             self.assertTrue(Path(d, "case", "busy", "part-0001.csv").is_file())
 
 
+class AuthAnalysisTest(unittest.TestCase):
+    def test_dump_to_facts_and_report(self):
+        import auth_analysis
+        import auth_fixture
+        with tempfile.TemporaryDirectory() as d:
+            auth_fixture.build(d)
+            events, stats = auth_analysis.read_dump(d, log=lambda m: None)
+            self.assertEqual(stats["duplicates"], 25)                       # same events under two mapped values
+            f = auth_analysis.analyse(events)
+            self.assertEqual(f["logons"], 18)
+            self.assertEqual(f["totals"], {"invalid credentials": 11, "locked": 3, "success": 4})
+            acc = {(a["account"], a["target"]): a for a in f["accounts"]}
+            bs = acc[("BS_APP", "PAYDB_01_P (CDB01)")]
+            self.assertEqual((bs["invalid credentials"], bs["locked"], bs["success"]), (3, 2, 1))
+            self.assertEqual(auth_analysis.utc(bs["first_locked"]), "2026-11-26 08:03:00")
+            self.assertEqual(auth_analysis.utc(bs["success_after_lock"]), "2026-11-26 08:30:00")
+            self.assertEqual(bs["sources"][0], ("10.9.8.7 (apphost1.example)", 6))
+            self.assertIn("db link PAY.EXAMPLE from HRDB_01_A", dict(acc[("SVC_LINK", "PAYDB_01_P (CDB01)")]["via"]))
+            # OS audit: only CONNECT records; SQL text holding STATUS:[4] '1017' or LOCKED_BY is not a logon
+            text = [e for e in events if e["sourcetype"] == "oracle:audit:text"]
+            self.assertEqual(sorted((e["account"], e["code"], e["privilege"]) for e in text), [("SCOTT", "1017", ""), ("SYS", "0", "SYSDBA")])
+            src = {s["source"]: s for s in f["sources"]}["10.9.8.7"]
+            self.assertEqual((src["failed_accounts"], src["max_per_account"], src["peak_10min"]), (9, 5, 5))
+            self.assertEqual({(c["service"], c["results"][0][0]) for c in f["connections"]},
+                             {("PAYDB_TAF.example", "0 connection established"), ("NOPE.example", "12514 listener does not know the requested service")})
+            self.assertEqual(f["outbound"][0]["to"], "10.3.3.3, 10.3.3.4")
+            self.assertEqual((f["alert_logons"][0]["account"], f["alert_logons"][0]["src_ip"]), ("RECO", "10.1.1.1"))
+            win = {e["code"]: e for e in events if e["sourcetype"] == "XmlWinEventLog"}
+            self.assertEqual((win["4625 0xc000006a"]["result"], win["4625 0xc000006a"]["meaning"]), ("invalid credentials", "bad password"))
+            self.assertEqual(win["4740"]["result"], "locked")
+            # report and CSV
+            subprocess.run([sys.executable, str(ROOT / "auth_analysis.py"), d], check=True, capture_output=True)
+            html_ = Path(d, "entities", "auth_report.html").read_text(encoding="utf-8")
+            self.assertIn('"logons": 18', html_)
+            self.assertNotIn("__DATA__", html_)
+            rows = Path(d, "entities", "auth_events.csv").read_text(encoding="utf-8-sig").splitlines()
+            self.assertEqual(len(rows), 1 + 22)
+
+
 class UpdaterTest(unittest.TestCase):
     """updater.py against a throwaway remote: update, local-edit guard, rollback and skip."""
 
