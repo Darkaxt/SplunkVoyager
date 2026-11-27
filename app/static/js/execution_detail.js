@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            if (!confirm('Are you sure you want to re-run this query and refresh its cached results?')) {
+            if (!await vConfirm({title: 'Re-run this query?', label: 'Re-run', lines: ['A new search runs on Splunk and its results replace the cached ones.']})) {
                 return;
             }
 
@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (deleteButton) {
         deleteButton.addEventListener('click', async () => {
             const executionId = deleteButton.getAttribute('data-execution-id') || config.executionId;
-            if (!confirm('Are you sure you want to delete this query execution record?')) {
+            if (!await vConfirm({title: 'Delete this query execution record?', label: 'Delete record', lines: ['Its stored results are removed.', "If it is the query's last execution, the saved query is removed too.", 'This cannot be undone.']})) {
                 return;
             }
             if (!executionId) {

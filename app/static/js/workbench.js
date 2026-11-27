@@ -8,8 +8,19 @@ const WB = (() => {
     const r = await fetch(url, opt);
     const ct = r.headers.get('content-type') || '';
     const data = ct.includes('json') ? await r.json() : await r.text();
-    if (!r.ok) throw new Error((data && data.message) || `HTTP ${r.status}`);
+    if (!r.ok) { const e = new Error((data && data.message) || `HTTP ${r.status}`); e.status = r.status; e.data = data; throw e; }
     return data;
+  }
+  // Destructive requests: the server answers 409 with what would be lost; after the dialog the request is sent
+  // again with the confirmation. Resolves to null when cancelled.
+  async function apiC(url, body = {}, method) {
+    try { return await api(url, body, method); }
+    catch (e) {
+      if (e.status !== 409 || !e.data || !e.data.confirm) throw e;
+      const c = e.data.confirm, r = await vConfirm(c);
+      if (!r) return null;
+      return api(url, {...body, confirm: c.type ? r : c.token}, method);
+    }
   }
   const fmt = t => t ? String(t).replace('T', ' ') : '';
   const badge = s => `<span class="badge ${esc(s)}">${esc(s)}</span>`;
@@ -101,6 +112,17 @@ const WB = (() => {
       const rows = [...tbl.querySelectorAll('tr')].slice(1);
       const insts = rows.map(r => ({name: r.querySelector('.i-name').value, base: r.querySelector('.i-base').value,
         locale: r.querySelector('.i-locale').value, app: r.querySelector('.i-app').value}));
+      const kept = new Set(insts.filter(i => i.base.trim()).map(i => i.name.trim().toLowerCase()));
+      const gone = instances.filter(i => !kept.has(i.name.toLowerCase()) && !insts.some(x => x.base.trim().replace(/\/+$/, '') === i.base));
+      if (gone.length) {
+        let used = [];
+        try { used = (await api('/api/inv')).filter(v => gone.some(g => g.name === v.instance)).map(v => `${v.name} (${v.instance})`); } catch (e) { /* list is optional */ }
+        const ok = await vConfirm({title: `Remove ${gone.length} Splunk instance(s)?`, label: 'Remove and save', lines: [
+          'Removed: ' + gone.map(g => `${g.name} (${g.base})`).join(', ') + '.',
+          used.length ? `Investigations using them will run on the default instance from now on: ${used.join(', ')}.` : 'No investigation uses them.',
+          'Their sessions stay in the browser; add the instance again to use it.']});
+        if (!ok) return;
+      }
       const di = rows.findIndex(r => r.querySelector('input[type=radio]').checked);
       try {
         const s = await api('/api/settings', {instances: insts, max_jobs: $('#s-max').value, voyager_url: $('#s-vurl').value,
@@ -109,6 +131,7 @@ const WB = (() => {
         if (di >= 0 && !insts[di].name.trim() && s.instances[di])
           await api('/api/settings', {default_instance: s.instances[di].name});
         $('#s-msg').textContent = 'Saved. Reinstall the userscript if you added or changed a URL.';
+        instances = s.instances;
         tbl.querySelectorAll('tr').forEach((r, k) => { if (k && s.instances[k - 1]) r.querySelector('.i-name').value = s.instances[k - 1].name; });
       } catch (e) { $('#s-msg').textContent = e.message; }
     };
@@ -129,10 +152,10 @@ const WB = (() => {
     let last = null;
 
     $('#inv-delete').onclick = async () => {
-      if (!confirm('Delete this investigation? Its jobs are stopped and all its exports, reports and graphs are removed. This cannot be undone.')) return;
       $('#inv-delete').disabled = true;
-      try { await api(base, {}, 'DELETE'); location.href = '/investigations'; }
-      catch (e) { alert(e.message); $('#inv-delete').disabled = false; }
+      try { if (await apiC(base, {}, 'DELETE')) location.href = '/investigations'; }
+      catch (e) { alert(e.message); }
+      $('#inv-delete').disabled = false;
     };
 
     // range editor
@@ -174,11 +197,14 @@ const WB = (() => {
     async function mapValues(values, btn) {
       $('#em-err').textContent = '';
       if (btn) btn.disabled = true;
-      try { await api(`${base}/entities`, {values, ...emOpts()}); refresh(); if (btn) btn.textContent = 'queued'; }
-      catch (e) { $('#em-err').textContent = e.message; if (btn) { btn.disabled = false; } }
+      try {
+        if (!await apiC(`${base}/entities`, {values, ...emOpts()})) { if (btn) btn.disabled = false; return false; }
+        refresh(); if (btn) btn.textContent = 'queued';
+      } catch (e) { $('#em-err').textContent = e.message; if (btn) { btn.disabled = false; } return false; }
+      return true;
     }
     $('#em-run').onclick = () => mapValues($('#em-values').value.split('\n').map(s => s.trim()).filter(Boolean), $('#em-run'))
-      .then(() => { $('#em-run').disabled = false; $('#em-run').textContent = 'Search and map'; $('#em-values').value = ''; });
+      .then(ok => { $('#em-run').disabled = false; $('#em-run').textContent = 'Search and map'; if (ok) $('#em-values').value = ''; });
     $('#em-rebuild').onclick = async () => {
       $('#em-err').textContent = '';
       try { await api(`${base}/entities/build`, {bin: $('#em-bin').value, group: $('#em-group').value}); refresh(); }
@@ -249,8 +275,9 @@ const WB = (() => {
       const ra = e.target.closest('[data-reanalyse]');
       if (ra) {
         ra.disabled = true;
-        try { await api(`${base}/network/${ra.dataset.reanalyse}/reanalyze`, {}); refresh(); }
-        catch (err) { alert(err.message); ra.disabled = false; }
+        try { await apiC(`${base}/network/${ra.dataset.reanalyse}/reanalyze`, {}); refresh(); }
+        catch (err) { alert(err.message); }
+        ra.disabled = false;
         return;
       }
       const b = e.target.closest('[data-map]');
@@ -301,10 +328,9 @@ const WB = (() => {
       if (l) { openLogs.has(l.dataset.log) ? openLogs.delete(l.dataset.log) : openLogs.add(l.dataset.log); force = true; render(last); return; }
       const a = e.target.closest('[data-act]');
       if (!a) return;
-      if (a.dataset.act === 'delete' && !confirm(a.title + '?')) return;
       a.disabled = true;
-      try { await api(`${base}/jobs/${a.dataset.j}/${a.dataset.act}`, {}); } catch (err) { alert(err.message); }
-      refresh();
+      try { await apiC(`${base}/jobs/${a.dataset.j}/${a.dataset.act}`, {}); } catch (err) { alert(err.message); }
+      a.disabled = false; force = true; refresh();
     });
 
     // A section is only redrawn when its content changed, and never while you are selecting text in it.

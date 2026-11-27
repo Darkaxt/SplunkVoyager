@@ -148,6 +148,103 @@ def delete_investigation(slug):
     raise RuntimeError(f"could not remove everything in {d}; close any file open from it and try again")
 
 
+# ------------------------------------------------------------------ double check before destructive actions
+def _du(path):
+    size = files = 0
+    for root, _, names in os.walk(path):
+        for n in names:
+            try:
+                size += os.path.getsize(os.path.join(root, n))
+                files += 1
+            except OSError:
+                pass
+    return size, files
+
+
+def _human(b):
+    for unit in ("B", "KB", "MB", "GB"):
+        if b < 1024 or unit == "GB":
+            return f"{b:,.0f} {unit}" if unit == "B" else f"{b:,.1f} {unit}"
+        b /= 1024
+
+
+def _searches(d, jid):
+    """Splunk searches a job has in progress (from its export manifests)."""
+    job = _read(d / "jobs" / jid / "job.json", {})
+    n = 0
+    for st in job.get("steps") or []:
+        for g in st.get("progress", []):
+            for m in glob.glob(g):
+                n += sum(1 for w in (_read(m, {}) or {}).get("windows", []) if w.get("state") in ("running", "downloading"))
+    return n
+
+
+def impact(slug, action, jid=None, values=None, earliest=None, latest=None):
+    """What a destructive action would remove or replace, for the confirmation the server asks for first.
+    None when nothing would be lost. 'type' = text the user must type; the token to send back is that text."""
+    d = inv_dir(slug)
+    inv = _read(d / "investigation.json", {})
+    if action == "delete_investigation":
+        jobs = [job_status(d, j.name, tail=0) for j in (d / "jobs").glob("*") if j.is_dir()]
+        running = [j for j in jobs if j["status"] in ("running", "waiting", "queued")]
+        size, files = _du(d)
+        seeds = len(_read(d / "entities" / "case.json", {"seeds": []}).get("seeds", []))
+        nets = sum(1 for j in jobs if j["kind"] == "network")
+        name = inv.get("name") or slug
+        lines = [f"{nets} network run(s), {seeds} mapped value(s), {len(jobs)} job(s) in total.",
+                 f"{_human(size)} in {files:,} files are removed: exports, reports, attack maps, graphs and logs."]
+        if running:
+            lines.append(f"{len(running)} running job(s) are stopped and their Splunk searches cancelled: "
+                         + ", ".join(j["title"][:60] for j in running[:5]))
+        lines.append("This cannot be undone.")
+        return {"title": f"Delete the investigation “{name}”?", "lines": lines, "type": name,
+                "token": name, "label": "Delete investigation"}
+    if action in ("delete_job", "stop", "reanalyze"):
+        st = job_status(d, jid, tail=0)
+        title = st.get("title") or jid
+        if action == "stop":
+            n = _searches(d, jid)
+            return {"title": f"Stop “{title}”?", "token": f"stop:{jid}", "label": "Stop job", "lines": [
+                (f"{n} Splunk search(es) in progress are cancelled." if n else "Its current step is interrupted."),
+                "Finished windows and results are kept: Resume continues from where it stopped."]}
+        if action == "reanalyze":
+            nd = d / "network" / jid
+            out = [f for f in ("analysis.json", "report.html", "findings.json", "attack_map.html") if (nd / f).is_file()]
+            return {"title": f"Re-analyse “{title}”?", "token": f"reanalyze:{jid}", "label": "Re-analyse",
+                    "lines": [f"Replaced with the new results: {', '.join(out) or 'nothing yet'}.",
+                              "The export is kept and Splunk isn't queried. The current report can't be restored."]}
+        if st["kind"] == "network":
+            nd = d / "network" / jid
+            size, files = _du(nd)
+            ex, _ = _du(nd / "export")
+            re_n = sum(1 for j in (d / "jobs").glob("reanalysis-*")
+                       if (_read(j / "job.json", {}).get("meta") or {}).get("target") == jid)
+            return {"title": f"Delete the network run “{title}”?", "type": "delete", "token": "delete",
+                    "label": "Delete run", "lines": [
+                        f"{_human(size)} in {files:,} files are removed, including the Splunk export ({_human(ex)}), "
+                        f"the report, findings and attack map" + (f", and its {re_n} re-analysis job(s)" if re_n else "") + ".",
+                        "Getting them back means exporting from Splunk again. This cannot be undone."]}
+        return {"title": f"Remove the job “{title}”?", "token": f"delete:{jid}", "label": "Remove job",
+                "lines": ["Its log is removed. Mapped values, their search results and the graph stay."]}
+    if action == "reset_range":
+        earliest, latest = earliest or inv.get("earliest"), latest or inv.get("latest") or "now"
+        ed = d / "entities"
+        seeds = {s["value"]: s for s in _read(ed / "case.json", {"seeds": []}).get("seeds", [])}
+        hit = [seeds[v] for v in values or [] if v in seeds and (seeds[v].get("earliest"), seeds[v].get("latest")) != (earliest, latest)]
+        if not hit:
+            return None
+        lines = []
+        for s_ in hit[:20]:
+            size, _ = _du(ed / "seeds" / s_.get("slug", "-"))
+            lines.append(f"{s_['value']}: {s_.get('earliest')} → {s_.get('latest')} becomes {earliest} → {latest}; "
+                         f"its earlier results ({_human(size)}) are removed and searched again.")
+        if len(hit) > 20:
+            lines.append(f"… and {len(hit) - 20} more.")
+        return {"title": f"Replace the earlier search of {len(hit)} mapped value(s)?", "token": "reset:" + ",".join(sorted(s_["value"] for s_ in hit)),
+                "label": "Replace and search again", "lines": lines}
+    raise ValueError(f"unknown action {action}")
+
+
 def update_investigation(slug, **kv):
     d = inv_dir(slug)
     inv = _read(d / "investigation.json", {})

@@ -17,6 +17,17 @@ def _err(e, code=400):
     return jsonify({"status": "error", "message": str(e)}), code
 
 
+def _confirm(body, imp):
+    """The double check: a destructive request is refused (409) with what it would remove, until it is sent again
+    with that confirmation's token (for the irreversible ones: the text the user had to type)."""
+    if imp and str(body.get("confirm") or "") != imp["token"]:
+        info = {k: imp[k] for k in ("title", "lines", "label", "type") if imp.get(k)}
+        if not imp.get("type"):
+            info["token"] = imp["token"]          # typed confirmations: the typed text is the token
+        return jsonify({"status": "confirm", "message": imp["title"], "confirm": info}), 409
+    return None
+
+
 def _json():
     if not request.is_json:
         abort(415)
@@ -158,6 +169,9 @@ def api_investigations():
 def api_investigation(slug):
     try:
         if request.method == "DELETE":
+            need = _confirm(request.get_json(silent=True) or {}, wb.impact(slug, "delete_investigation"))
+            if need:
+                return need
             wb.delete_investigation(slug)
             return jsonify({"status": "deleted"})
         if request.method == "PATCH":
@@ -194,8 +208,11 @@ def api_network(slug):
 
 @workbench_bp.route("/api/inv/<slug>/network/<jid>/reanalyze", methods=["POST"])
 def api_reanalyze(slug, jid):
-    _json()
+    body = _json()
     try:
+        need = _confirm(body, wb.impact(slug, "reanalyze", jid))
+        if need:
+            return need
         return jsonify({"status": "started", "job": wb.reanalyze_network(slug, jid)})
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         return _err(e)
@@ -205,6 +222,11 @@ def api_reanalyze(slug, jid):
 def api_entities(slug):
     d = _json()
     try:
+        if d.get("reset_range"):
+            need = _confirm(d, wb.impact(slug, "reset_range", values=[v.strip() for v in d.get("values") or [] if v and v.strip()],
+                                         earliest=d.get("earliest") or None, latest=d.get("latest") or None))
+            if need:
+                return need
         jid = wb.start_entities(slug, d.get("values") or [], d.get("earliest") or None, d.get("latest") or None,
                                 d.get("include", ""), _int(d.get("max_events"), 500000), _int(d.get("bin"), 5),
                                 d.get("group") or "sourcetype", d.get("title", ""), bool(d.get("reset_range")))
@@ -225,8 +247,12 @@ def api_rebuild(slug):
 
 @workbench_bp.route("/api/inv/<slug>/jobs/<jid>/<action>", methods=["POST"])
 def api_job_action(slug, jid, action):
-    _json()
+    body = _json()
     try:
+        if action in ("stop", "delete"):
+            need = _confirm(body, wb.impact(slug, "stop" if action == "stop" else "delete_job", jid))
+            if need:
+                return need
         if action == "stop":
             wb.stop_job(slug, jid)
         elif action == "resume":

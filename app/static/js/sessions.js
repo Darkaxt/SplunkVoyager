@@ -27,7 +27,7 @@ function setupSessionActions() {
                 return;
             }
             
-            if (!confirm('Are you sure you want to invalidate this session?')) {
+            if (!await vConfirm({title: 'Invalidate this session?', label: 'Invalidate', lines: ['Its stored cookies are deleted and Voyager stops using it.', 'Searches and exports that rely on it wait until an open Splunk tab sends a new session.']})) {
                 return;
             }
             
@@ -124,7 +124,7 @@ if (invalidateButton) {
             return;
         }
         
-        if (!confirm('Are you sure you want to invalidate this session?')) {
+        if (!await vConfirm({title: 'Invalidate this session?', label: 'Invalidate', lines: ['Its stored cookies are deleted and Voyager stops using it.', 'Searches and exports that rely on it wait until an open Splunk tab sends a new session.']})) {
             return;
         }
         

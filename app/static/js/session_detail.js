@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
         invalidateButton.addEventListener('click', async () => {
             const sessionId = invalidateButton.getAttribute('data-session-id') || config.sessionId;
             if (!sessionId) { showError('Session ID not found for invalidation.'); return; }
-            if (!confirm('Are you sure you want to invalidate this session?')) return;
+            if (!await vConfirm({title: 'Invalidate this session?', label: 'Invalidate', lines: ['Its stored cookies are deleted and Voyager stops using it.', 'Searches and exports that rely on it wait until an open Splunk tab sends a new session.']})) return;
              try {
                 invalidateButton.disabled = true; invalidateButton.textContent = 'Invalidating...';
                 const response = await apiRequest(`/api/session/${sessionId}/invalidate`, { method: 'POST' });
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            if (!confirm('Are you sure you want to re-run this query and refresh its cached results?')) {
+            if (!await vConfirm({title: 'Re-run this query?', label: 'Re-run', lines: ['A new search runs on Splunk and its results replace the cached ones.']})) {
                 return;
             }
 
@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
         button.addEventListener('click', async () => {
             const executionId = button.getAttribute('data-execution-id');
 
-            if (!confirm('Are you sure you want to delete this query execution record?')) {
+            if (!await vConfirm({title: 'Delete this query execution record?', label: 'Delete record', lines: ['Its stored results are removed.', "If it is the query's last execution, the saved query is removed too.", 'This cannot be undone.']})) {
                 return;
             }
 

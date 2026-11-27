@@ -12,6 +12,34 @@ from waitress import serve
 from app import create_app
 from app.config import HOST, PORT, DEBUG, logger, DB_PATH
 
+def confirm_wipe(yes=False):
+    """List what --wipe removes and ask to type 'wipe'. Without a terminal, only --yes proceeds."""
+    base_dir = Path(__file__).resolve().parent
+    items = [p for p in (base_dir / 'data').glob('*') if p.name not in ('investigations', 'settings.json')]
+    if (base_dir / 'debug').exists():
+        items.append(base_dir / 'debug')
+    size = 0
+    for p in items:
+        for f in ([p] if p.is_file() else p.rglob('*')):
+            try:
+                size += f.stat().st_size if f.is_file() else 0
+            except OSError:
+                pass
+    print(f"--wipe removes {len(items)} item(s), {size / 1e6:,.1f} MB: " + ", ".join(p.name for p in items))
+    print("  (sessions and cookies, the query database, logs, debug files; investigations and settings are kept)")
+    if yes:
+        return True
+    if not sys.stdin.isatty():
+        print("Not wiping: no terminal to confirm. Add --yes to wipe without the question.")
+        return False
+    try:
+        ok = input("Type wipe to confirm: ").strip() == "wipe"
+    except EOFError:
+        ok = False
+    print("Wiping." if ok else "Not wiping.")
+    return ok
+
+
 def wipe_folders():
     """
     Wipe the data and debug folders for fresh testing
@@ -284,12 +312,15 @@ def main():
     parser.add_argument('--no-browser', action='store_true', help="Don't open the web interface in the browser")
     parser.add_argument('--no-supervisor', action='store_true',
                         help="Run the server directly (no automatic restart after updates)")
-    parser.add_argument('--wipe', action='store_true', help='Wipe session data (cookies, database, logs) and debug folders; investigations and settings are kept')
+    parser.add_argument('--wipe', action='store_true', help='Wipe session data (cookies, database, logs) and debug folders; investigations and settings are kept (asks first)')
+    parser.add_argument('--yes', action='store_true', help='with --wipe: no question (for scripts)')
     args = parser.parse_args()
-    
+
     try:
-        # Wipe folders if requested
+        # Wipe folders if requested, after a double check
         if args.wipe:
+            if not confirm_wipe(args.yes):
+                sys.exit(1)
             wipe_folders()
         
         # Set debug environment variable if --debug flag is passed

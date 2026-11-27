@@ -103,6 +103,13 @@ each list shows how many values are hidden and, on demand, which entry hides eac
 **After updating Payload Analyzer**, *Re-analyse* on a network run runs the analysis, report and findings
 again on the export it already has; Splunk isn't queried.
 
+**Destructive actions ask twice.** Deleting an investigation or a network run, removing a job, stopping a job,
+re-analysing a run, replacing the range of values already mapped, removing a Splunk instance, and the older
+session / query pages' invalidate, re-run and delete. The server refuses the first request and answers with
+what would be lost (sizes, files, running searches); the page shows it and sends the request again only after
+you confirm. Deleting an investigation needs its name typed, deleting a network run the word `delete`.
+`run.py --wipe` lists what it removes and asks you to type `wipe` (`--yes` for scripts).
+
 **Jobs.** Each run is a job with steps and a log. Jobs keep running when you close the browser or restart
 Voyager. *Stop* also cancels its Splunk searches; *Resume* continues an interrupted or stopped job where it
 stopped, without repeating finished windows.

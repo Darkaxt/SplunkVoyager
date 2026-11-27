@@ -1,4 +1,55 @@
 /**
+ * vConfirm: the confirmation dialog for every destructive action. Resolves to false (cancel, Escape, click
+ * outside) or true; with `type`, the confirm button stays disabled until that exact text is typed, and the
+ * promise resolves to the typed text.
+ *   await vConfirm({title, lines: [..], label: 'Delete', type: 'name to type'})
+ */
+function vConfirm(o) {
+    o = typeof o === 'string' ? {title: o} : (o || {});
+    if (!document.getElementById('vconfirm-style')) {
+        const st = document.createElement('style');
+        st.id = 'vconfirm-style';
+        st.textContent = `
+dialog.vconfirm { position:fixed; inset:0; margin:auto; height:fit-content; border:1px solid #5a2a2a; border-radius:8px; background:#1d1f23; color:#e6edf3; padding:0; max-width:560px; width:calc(100% - 40px); box-shadow:0 20px 60px #000a; }
+dialog.vconfirm::backdrop { background:#0009; }
+dialog.vconfirm .vc-b { padding:18px 20px 6px; }
+dialog.vconfirm h3 { margin:0 0 10px; font-size:16px; color:#ff8a84; font-weight:600; }
+dialog.vconfirm ul { margin:0 0 10px 18px; padding:0; line-height:1.55; font-size:13.5px; color:#c9d1d9; }
+dialog.vconfirm label { display:block; font-size:13px; color:#9aa4b2; margin:10px 0 4px; }
+dialog.vconfirm label b { color:#e6edf3; font-family:Consolas,monospace; font-weight:600; user-select:all; }
+dialog.vconfirm input { width:100%; box-sizing:border-box; background:#111214; border:1px solid #3a3d44; color:#e6edf3; border-radius:5px; padding:7px 9px; font:13px Consolas,monospace; }
+dialog.vconfirm .vc-a { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 16px; }
+dialog.vconfirm button { border-radius:5px; padding:6px 14px; font-size:13px; cursor:pointer; border:1px solid #3a3d44; background:#2a2c31; color:#e6edf3; }
+dialog.vconfirm button.vc-ok { background:#8e2b26; border-color:#b8433c; color:#fff; font-weight:600; }
+dialog.vconfirm button.vc-ok:disabled { opacity:.4; cursor:not-allowed; }`;
+        document.head.appendChild(st);
+    }
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+    const dlg = document.createElement('dialog');
+    dlg.className = 'vconfirm';
+    dlg.innerHTML = `<div class="vc-b"><h3>${esc(o.title || 'Are you sure?')}</h3>
+        ${(o.lines || []).length ? `<ul>${o.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
+        ${o.type ? `<label>Type <b>${esc(o.type)}</b> to confirm</label><input type="text" autocomplete="off" spellcheck="false">` : ''}</div>
+      <div class="vc-a"><button type="button" class="vc-no">Cancel</button><button type="button" class="vc-ok">${esc(o.label || 'Confirm')}</button></div>`;
+    document.body.appendChild(dlg);
+    const ok = dlg.querySelector('.vc-ok'), no = dlg.querySelector('.vc-no'), inp = dlg.querySelector('input');
+    return new Promise(resolve => {
+        const done = v => { dlg.close(); dlg.remove(); resolve(v); };
+        if (inp) {
+            ok.disabled = true;
+            inp.addEventListener('input', () => { ok.disabled = inp.value !== o.type; });
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !ok.disabled) done(inp.value); });
+        }
+        ok.onclick = () => done(inp ? inp.value : true);
+        no.onclick = () => done(false);
+        dlg.addEventListener('cancel', e => { e.preventDefault(); done(false); });
+        dlg.addEventListener('click', e => { if (e.target === dlg) done(false); });
+        dlg.showModal();
+        (inp || no).focus();          // the safe choice has the focus: Enter alone never confirms
+    });
+}
+
+/**
  * SplunkVoyager main JavaScript file
  * Contains common functionality used across the application
  */

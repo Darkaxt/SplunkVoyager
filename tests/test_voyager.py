@@ -175,7 +175,16 @@ class WebAppTest(unittest.TestCase):
                 self.assertEqual(self.c.get("/inv/..%2f..%2fapp/files/x.html").status_code, 404)
                 evil = {"Origin": "https://evil.example"}
                 self.assertEqual(self.c.delete(f"/api/inv/{inv['slug']}", headers=evil).status_code, 403)
-                self.assertEqual(self.c.delete(f"/api/inv/{inv['slug']}").status_code, 200)
+                # double check: refused with what would be removed until the name is typed
+                r = self.c.delete(f"/api/inv/{inv['slug']}", json={})
+                self.assertEqual(r.status_code, 409)
+                c = r.get_json()["confirm"]
+                self.assertEqual(c["type"], "Guard test")
+                self.assertNotIn("token", c)
+                self.assertTrue(any("cannot be undone" in l for l in c["lines"]))
+                self.assertEqual(self.c.delete(f"/api/inv/{inv['slug']}", json={"confirm": "guard test"}).status_code, 409)
+                self.assertTrue((Path(d) / inv["slug"]).exists())
+                self.assertEqual(self.c.delete(f"/api/inv/{inv['slug']}", json={"confirm": "Guard test"}).status_code, 200)
                 self.assertFalse((Path(d) / inv["slug"]).exists())
                 self.assertEqual(self.c.get(f"/investigations/{inv['slug']}").status_code, 404)
             finally:
@@ -403,6 +412,19 @@ class EndToEndTest(unittest.TestCase):
             self.assertTrue(rep.is_file())
             with self.assertRaises(RuntimeError):            # belongs to its run
                 wb.delete_job(inv["slug"], jr)
+            # what the double check tells before each destructive action
+            imp = wb.impact(inv["slug"], "delete_job", jn)
+            self.assertEqual((imp["type"], imp["token"]), ("delete", "delete"))
+            self.assertIn("Splunk export", imp["lines"][0])
+            self.assertIn("1 re-analysis job(s)", imp["lines"][0])
+            self.assertIn("report.html", " ".join(wb.impact(inv["slug"], "reanalyze", jn)["lines"]))
+            self.assertIn("Resume", " ".join(wb.impact(inv["slug"], "stop", jn)["lines"]))
+            reset = wb.impact(inv["slug"], "reset_range", values=["203.0.113.7", "new.example"], earliest="2026-10-01")
+            self.assertEqual(len(reset["lines"]), 1)
+            self.assertIn("203.0.113.7", reset["lines"][0])
+            seed = wb.get_investigation(inv["slug"])["entities"]["seeds"][0]
+            self.assertIsNone(wb.impact(inv["slug"], "reset_range", values=["203.0.113.7"],
+                                        earliest=seed["earliest"], latest=seed["latest"]))
             wb.delete_job(inv["slug"], jn)                   # the run takes its re-analyses with it
             left = {j["id"] for j in wb.get_investigation(inv["slug"])["jobs"]}
             self.assertFalse({jn, jr} & left)
