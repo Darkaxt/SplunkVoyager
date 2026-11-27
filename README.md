@@ -93,6 +93,16 @@ exported before this change have no sizes: run the analysis again from Splunk to
 the old export).
 `python network_map.py analysis.json -o attack_map.html [--sanitize] [--requests requests.jsonl]` builds it by hand.
 
+**Credentials in URLs.** The findings step also looks through every merged request (path and query string,
+decoded as many times as needed) for `scheme://user:password@host`, `Basic <base64>` values, and password,
+token or API-key parameters (not anti-CSRF, captcha, nonce or paging ones). It writes the full values to
+`credentials.jsonl` in the run's folder and adds a *Credentials in URLs* section to the HTML report: kind, site
+and path, parameter, user, secret, requests, status codes, sources (flagged when they are also attack sources),
+first and last seen, and the request as evidence. Secrets are masked and stored encoded in the page; a click
+decodes one value, another masks it again. The same secrets elsewhere in the report (Payload Analyzer's
+payload tables, graph, focus results) are masked the same way; values shorter than 4 characters are only
+masked in the credentials section. `findings.json` and the investigation page hold only masked values.
+
 **Findings lists and the blocklist.** Each network run lists its attack sources and the callbacks / hosts found
 inside payloads, ranked; the top 50 are shown, *Show all* lists every value. Values that are not indicators
 (XML namespaces such as `www.w3.org` quoted in payloads, placeholders like `http://a`) are hidden by a global
@@ -157,6 +167,7 @@ with the new range. Each script has `--help`. The command-line tools use the def
 | `splunk_export.py` | resumable, windowed Splunk export |
 | `network_feed.py` | query builder, window merge and findings between the export and Payload Analyzer |
 | `network_map.py`, `network_map_template.html` | attack map of a network run |
+| `credentials.py` | credentials in request URLs: scan, credentials.jsonl, report section |
 | `blocklist.py` | global blocklist for the findings lists |
 | `exportfiles.py` | export folders: part files, per-window zips or `export.zip`; `pack` command |
 | `pivot_graph.py`, `pivot_graph_template.html` | entity mapper |

@@ -380,6 +380,29 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(lv[("192.0.2.200", "shop.example")], "probing")        # the scanner
         self.assertEqual(lv[("198.51.100.23", "app.example")], "extraction")    # 2 payloads: too few for "in order"
         self.assertIn("sustained", (d / "attack_map.html").read_text(encoding="utf-8"))
+        # credentials in URLs: full values in credentials.jsonl; in the report and findings never as plain text
+        creds = [json.loads(l) for l in (d / "credentials.jsonl").read_text(encoding="utf-8").splitlines()]
+        got = {(c["kind"], c["site"], c["user"], c["secret"]) for c in creds}
+        self.assertIn(("url-credentials", "files.example", "svc_backup", "W1nter#Pass"), got)
+        self.assertIn(("password", "shop.example", "jdoe", "Summer2026!"), got)
+        login = next(c for c in creds if c["user"] == "jdoe")
+        self.assertEqual((login["requests"], login["status"], login["src"]), (3, ["302"], ["10.20.30.40"]))
+        report = (d / "report.html").read_text(encoding="utf-8")
+        self.assertIn('id="s-cred"', report)
+        self.assertEqual(report.count('href="#s-cred"'), 1)
+        findings = json.loads((d / "findings.json").read_text(encoding="utf-8"))
+        for secret in ("W1nter#Pass", "W1nter%23Pass", "Summer2026!", "Summer2026%21"):
+            self.assertNotIn(secret, report.split("<!--voyager-credentials-->", 1)[1])   # the section and after
+            self.assertNotIn(secret, json.dumps(findings["credentials"]))
+        cbu = next(c for c in findings["callbacks"] if "svc_backup" in c["value"])   # Payload Analyzer's artifact
+        self.assertEqual(cbu["display"], "http://svc_backup:W•••••••••s@192.168.10.5/admin")
+        fc = {c["user"]: c for c in json.loads((d / "findings.json").read_text(encoding="utf-8"))["credentials"]}
+        self.assertEqual((fc["jdoe"]["masked"], fc["jdoe"]["length"]), ("S•••••••••!", 11))
+        self.assertEqual(fc["svc_backup"]["attack_sources"], ["198.51.100.23"])
+        # running the findings step again replaces the section instead of adding a second one
+        network_feed.iocs(d / "analysis.json", d / "findings.json")
+        report = (d / "report.html").read_text(encoding="utf-8")
+        self.assertEqual((report.count('id="s-cred"'), report.count('href="#s-cred"')), (1, 1))
         # sizes: from the export through requests.jsonl to each payload (by Payload Analyzer's line references)
         self.assertEqual(m["sizes"], {"req": True, "resp": True})
         us = {u["id"]: u for u in m["units"]}

@@ -244,6 +244,10 @@ const WB = (() => {
               ${n.map ? `<a class="b" target="_blank" href="/inv/${slug}/files/${esc(n.map)}">Open attack map</a>` : ''}
               ${n.can_reanalyse ? `<button data-reanalyse="${esc(n.job)}" title="Run Payload Analyzer again on this export (after updating it). Splunk isn't queried.">Re-analyse</button>` : ''}
               <button class="map-sel">Map selected</button></div></div>
+          ${f.credentials && f.credentials.length ? `<div class="note warn" style="margin:6px 0">${f.credentials.length.toLocaleString()} credential(s) seen in request URLs
+            (${[...new Set(f.credentials.map(c => c.site))].slice(0, 5).map(esc).join(', ')}${new Set(f.credentials.map(c => c.site)).size > 5 ? ', …' : ''}).
+            ${n.report ? `See <a target="_blank" href="/inv/${slug}/files/${esc(n.report)}#s-cred">Credentials in URLs</a> in the report: masked, click a value to decode it.` : ''}
+            Full values: credentials.jsonl in this run's folder.</div>` : ''}
           <div class="grid2" style="margin-top:6px">
             <div><h3>Attack sources (${cnt(allS, hs, kS)})</h3>
               ${src.length ? `<table class="t"><tr><th></th><th>Address</th><th class="right">Requests</th><th>Categories</th><th>Active</th><th></th></tr>
@@ -253,7 +257,7 @@ const WB = (() => {
               ${listFoot(kS, allS.length, hs)}</div>
             <div><h3>Callbacks and embedded hosts (${cnt(allC, hc, kC)})</h3>
               ${cb.length ? `<table class="t"><tr><th></th><th>Value</th><th>Kind</th><th>Categories</th><th></th></tr>
-              ${cb.map(c => `<tr><td>${chk(c.value)}</td><td class="mono ellip" title="${esc(c.value)}">${esc(c.value)}</td>
+              ${cb.map(c => `<tr><td>${chk(c.value)}</td><td class="mono ellip" title="${esc(c.display || c.value)}">${esc(c.display || c.value)}</td>
                 <td class="muted">${esc(c.kind)}${c.internal ? ' · internal' : ''}</td>
                 <td>${c.categories.map(x => `<span class="badge cat">${esc(x)}</span>`).join('')}</td><td class="nowrap">${mapBtn(c.value)} ${hideBtn(c.value)}</td></tr>`).join('')}</table>` : '<div class="empty">None.</div>'}
               ${listFoot(kC, allC.length, hc)}</div>

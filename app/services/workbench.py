@@ -471,7 +471,7 @@ def _analysis_steps(nd, title="Attack map", low_memory=False):
                                              + (["--low-memory"] if low_memory else [])},
         {"name": "HTML report", "argv": [PY, "-I", str(pa / "report_builder.py"), str(nd / "analysis.json"),
                                          "-o", str(nd / "report.html")]},
-        {"name": "Findings for the entity mapper", "argv": [PY, str(ROOT / "network_feed.py"), "iocs",
+        {"name": "Findings and credentials", "argv": [PY, str(ROOT / "network_feed.py"), "iocs",
                                                              str(nd / "analysis.json"), "-o", str(nd / "findings.json")]},
         {"name": "Attack map", "argv": [PY, str(ROOT / "network_map.py"), str(nd / "analysis.json"),
                                         "-o", str(nd / "attack_map.html"), "--title", title]},

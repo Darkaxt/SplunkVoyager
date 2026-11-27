@@ -470,16 +470,46 @@ def iocs(analysis_path, out):
                             "first": v["first"], "last": v["last"], "targets": sorted(v["targets"])}
                            for k, v in src.items()), key=lambda x: (-x["requests"], x["value"])),
         "callbacks": sorted(({"value": k, "kind": v["kind"], "internal": v["internal"], "units": v["units"],
-                              "categories": sorted(v["categories"])} for k, v in cb.items()),
+                              "categories": sorted(v["categories"]), **_masked_display(k)} for k, v in cb.items()),
                             key=lambda x: (x["internal"], -x["units"], x["value"])),
         "targets": sorted(({"site": k, "requests": v["requests"], "paths": len(v["paths"]),
                             "categories": sorted(v["categories"])} for k, v in tg.items()),
                           key=lambda x: (-x["requests"], x["site"])),
         "categories": (d.get("meta") or {}).get("effective_category_counts") or (d.get("meta") or {}).get("category_counts"),
     }
+    # credentials in the request URLs: full values in credentials.jsonl, masked in findings.json, masked and
+    # encoded (decoded on click) in the HTML report
+    reqs = _requests_for(analysis_path, d)
+    if reqs:
+        import credentials
+        creds = credentials.scan_requests(reqs)
+        credentials.write_jsonl(creds, Path(out).with_name("credentials.jsonl"))
+        res["credentials"] = credentials.summary(creds, src.keys())
+        report = Path(analysis_path).with_name("report.html")
+        if report.is_file():
+            credentials.inject_report(report, creds, src.keys())
+            print(f"Credentials section added to {report}", file=sys.stderr)
     Path(out).write_text(json.dumps(res, indent=1), encoding="utf-8")
     print(f"{len(res['sources'])} attack sources, {len(res['callbacks'])} callback artifacts, "
-          f"{len(res['targets'])} targeted sites -> {out}", file=sys.stderr)
+          f"{len(res['targets'])} targeted sites"
+          + (f", {len(res['credentials'])} credential(s) in URLs" if "credentials" in res else "") + f" -> {out}",
+          file=sys.stderr)
+
+
+def _masked_display(value):
+    """{"display": value with the password of any user:password@ masked} when it has one."""
+    import credentials
+    out = credentials.USERINFO.sub(lambda m: m.group(0)[:m.start(3) - m.start(0)]
+                                   + credentials.mask(credentials.decode(m.group(3), plus=False)) + "@" + m.group(4), value)
+    return {"display": out} if out != value else {}
+
+
+def _requests_for(analysis_path, report):
+    """The merged requests an analysis was made from: beside it, or its recorded source."""
+    for c in (Path(analysis_path).with_name("requests.jsonl"), Path((report.get("meta") or {}).get("source") or "")):
+        if c.name and c.suffix == ".jsonl" and c.is_file():
+            return c
+    return None
 
 
 def main():

