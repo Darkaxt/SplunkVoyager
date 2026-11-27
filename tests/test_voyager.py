@@ -94,6 +94,34 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("http://localhost/api/receive_cookies", js)
         self.assertEqual(self.c.post("/api/settings", json={"splunk_base": "not a url"}).status_code, 400)
 
+    def test_blocklist(self):
+        import blocklist
+        bl = blocklist.Blocklist(blocklist.DEFAULT + "203.0.113.0/24\n*.cdn.example\n=http://exact\nre:\\.local(/|$)\n")
+        hidden = {"a": "single-label name", "http://a": "single-label name", "www.w3.org": "w3.org",
+                  "http://www.w3.org/1999/XSL/Transform": "w3.org", "xml.apache.org": "apache.org",
+                  "http://203.0.113.9:8080/x": "203.0.113.0/24", "x.cdn.example": "*.cdn.example",
+                  "http://exact": "=http://exact", "intranet.local": "re:\\.local(/|$)"}
+        for v, rule in hidden.items():
+            self.assertEqual(bl.match(v), rule, v)
+        for v in ("cb.attacker.example", "evilw3.org", "localhost", "127.0.0.1", "198.51.100.23", "http://exact.example"):
+            self.assertIsNone(bl.match(v), v)
+        self.assertIsNone(blocklist.Blocklist("", single_label=False).match("http://a"))
+        self.assertEqual(blocklist.suggest("http://cdn.evil.co.uk/x.js"), "evil.co.uk")
+        self.assertEqual(blocklist.suggest("http://1.2.3.4/x"), "1.2.3.4")
+        # through the app: the default list, a bad regex refused, an entry added from a findings row
+        self.assertIn("w3.org", self.c.get("/api/settings").get_json()["blocklist"])
+        self.assertEqual(self.c.post("/api/settings", json={"blocklist": "re:(unclosed"}).status_code, 400)
+        r = self.c.post("/api/blocklist/add", json={"entry": "evil.example"})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.get_json()["blocklist"].rstrip().endswith("evil.example"))
+        self.assertEqual(self.c.post("/api/blocklist/suggest", json={"value": "http://a.b.evil.example/"}).get_json(),
+                         {"entry": "evil.example"})
+        f = blocklist.filter_findings({"sources": [{"value": "198.51.100.23"}],
+                                       "callbacks": [{"value": "http://x.evil.example/p"}, {"value": "cb.attacker.example"}]},
+                                      blocklist.from_settings())
+        self.assertEqual([c["value"] for c in f["callbacks"]], ["cb.attacker.example"])
+        self.assertEqual(f["hidden"]["callbacks"][0]["rule"], "evil.example")
+
     def test_several_instances(self):
         self.vs.SETTINGS_PATH.write_text(json.dumps({"splunk_base": "https://old.example.com", "splunk_locale": "en-GB"}))
         s = self.vs.load()                                   # single-URL settings convert to one instance

@@ -67,3 +67,9 @@
 .wb .nowrap { white-space:nowrap; }
 .wb .ellip { max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .wb .toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }
+
+.wb button.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); padding:2px 8px; font-size:12px; }
+.wb button.ghost:hover { color:#e6edf3; border-color:#555b66; }
+.wb .listfoot { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:flex-start; }
+.wb .listfoot table.hiddenlist { flex-basis:100%; margin-top:4px; opacity:.8; }
+.wb textarea.mono { font-family:Consolas, monospace; font-size:12.5px; }

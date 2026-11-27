@@ -107,6 +107,8 @@ def get_investigation(slug):
     jobs = [job_status(d, j.name) for j in (d / "jobs").glob("*") if j.is_dir()]
     jobs.sort(key=lambda j: (j.get("created") or "", j["id"]), reverse=True)   # newest first
     inv["jobs"] = jobs
+    import blocklist
+    bl = blocklist.from_settings()
     net = []
     for j in jobs:
         if j["kind"] != "network":
@@ -120,7 +122,7 @@ def get_investigation(slug):
                     "report": (nd / "report.html").is_file() and f"network/{j['id']}/report.html",
                     "map": (nd / "attack_map.html").is_file() and f"network/{j['id']}/attack_map.html",
                     "mode": _read(nd / "analysis.mode.json"),
-                    "findings": _read(nd / "findings.json")})
+                    "findings": blocklist.filter_findings(_read(nd / "findings.json"), bl)})
     inv["network"] = net
     ed = d / "entities"
     case = _read(ed / "case.json", {"seeds": []})

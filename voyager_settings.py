@@ -25,6 +25,8 @@ DEFAULTS = {
     "max_jobs": 2,              # Splunk searches per module running at once
     "auto_update": "apply",     # apply: install new versions from GitHub and restart | check: only show them | off
     "update_interval": 30,      # minutes between checks
+    "blocklist": None,          # text, see blocklist.py (None = its default list)
+    "blocklist_single_label": True,
 }
 INSTANCE_DEFAULTS = {"name": "", "base": "", "locale": "en-US", "app": ""}
 _current = contextvars.ContextVar("voyager_splunk_instance", default=None)
@@ -79,6 +81,9 @@ def load():
     if os.environ.get("SPLUNK_APP"):
         d["app"] = os.environ["SPLUNK_APP"]
     s["default"] = d
+    if s.get("blocklist") is None:
+        import blocklist
+        s["blocklist"] = blocklist.DEFAULT
     s["splunk_base"], s["splunk_locale"], s["splunk_app"] = d["base"], d["locale"] or "en-US", d["app"]
     return s
 
@@ -113,6 +118,15 @@ def save(values):
         s["auto_update"] = values["auto_update"]
     if "update_interval" in values:
         s["update_interval"] = max(5, min(1440, int(values["update_interval"])))
+    if "blocklist" in values:
+        import blocklist
+        text = str(values["blocklist"] or "").replace("\r\n", "\n")
+        errs = blocklist.Blocklist(text).errors
+        if errs:
+            raise ValueError("blocklist: " + "; ".join(errs[:5]))
+        s["blocklist"] = text
+    if "blocklist_single_label" in values:
+        s["blocklist_single_label"] = bool(values["blocklist_single_label"])
     names = [i["name"] for i in s["instances"]]
     if s["default_instance"] not in names:
         s["default_instance"] = names[0] if names else ""

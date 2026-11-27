@@ -37,6 +37,19 @@
     </div>
   </div>
   <div class="panel full">
+    <h2>Findings blocklist</h2>
+    <div class="hint" style="margin-top:0">Values hidden from the attack sources and callback lists of every investigation. Nothing is
+      deleted: each list shows how many values are hidden and by which entry. One entry per line, # for comments:
+      <span class="mono">example.org</span> the domain and its subdomains (as a host or in a URL) ·
+      <span class="mono">*.cdn.example</span> wildcards · <span class="mono">203.0.113.0/24</span> addresses ·
+      <span class="mono">=http://a</span> this exact value · <span class="mono">re:\.local(/|$)</span> a regular expression.
+      The <i>Hide</i> button on a findings row adds an entry here.</div>
+    <textarea id="b-text" class="mono" rows="14" spellcheck="false">{{ settings.blocklist }}</textarea>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="b-single" {{ 'checked' if settings.blocklist_single_label }}>
+      Hide single-label names (<span class="mono">a</span>, <span class="mono">http://a</span>, <span class="mono">foo:8080</span>); localhost and addresses stay</label>
+    <div class="actions"><button class="primary" id="b-save">Save</button><span class="sub" id="b-msg"></span></div>
+  </div>
+  <div class="panel full">
     <div class="toolbar"><h2 style="margin:0">Updates</h2><span class="sub" id="u-state"></span></div>
     <div class="row">
       <div><label class="f">When a new version is on GitHub</label>

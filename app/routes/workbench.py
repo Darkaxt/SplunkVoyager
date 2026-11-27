@@ -88,6 +88,30 @@ def api_settings():
         return _err(e)
 
 
+@workbench_bp.route("/api/blocklist/add", methods=["POST"])
+def api_blocklist_add():
+    """Append one entry to the global blocklist (from a findings row)."""
+    import blocklist
+    entry = str(_json().get("entry") or "").strip()
+    if not entry or "\n" in entry:
+        return _err(ValueError("one entry, on one line"))
+    s = voyager_settings.load()
+    text = s.get("blocklist") or ""
+    if entry not in [l.strip() for l in text.splitlines()]:
+        text = text.rstrip("\n") + "\n" + entry + "\n"
+    try:
+        s = voyager_settings.save({"blocklist": text})
+    except (ValueError, OSError) as e:
+        return _err(e)
+    return jsonify({"blocklist": s["blocklist"], "rules": len(blocklist.from_settings(s).rules)})
+
+
+@workbench_bp.route("/api/blocklist/suggest", methods=["POST"])
+def api_blocklist_suggest():
+    import blocklist
+    return jsonify({"entry": blocklist.suggest(_json().get("value"))})
+
+
 @workbench_bp.route("/api/update", methods=["GET"])
 def api_update_status():
     import updater

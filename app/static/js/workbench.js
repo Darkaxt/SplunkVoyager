@@ -112,6 +112,14 @@ const WB = (() => {
         tbl.querySelectorAll('tr').forEach((r, k) => { if (k && s.instances[k - 1]) r.querySelector('.i-name').value = s.instances[k - 1].name; });
       } catch (e) { $('#s-msg').textContent = e.message; }
     };
+    $('#b-save').onclick = async () => {
+      $('#b-msg').textContent = '';
+      try {
+        const s = await api('/api/settings', {blocklist: $('#b-text').value, blocklist_single_label: $('#b-single').checked});
+        $('#b-text').value = s.blocklist;
+        $('#b-msg').textContent = 'Saved. Investigation pages apply it at their next refresh.';
+      } catch (e) { $('#b-msg').textContent = e.message; }
+    };
   }
 
   // ---------------------------------------------------------------- investigation page
@@ -178,6 +186,17 @@ const WB = (() => {
     };
 
     // findings
+    const TOP = 50, showAll = new Set(), showHidden = new Set();
+    const hideBtn = v => `<button class="ghost" data-block="${esc(v)}" title="Hide from the findings of every investigation (adds it to the blocklist in Settings)">Hide</button>`;
+    function listFoot(key, total, hidden) {
+      let h = '';
+      if (total > TOP) h += `<button class="ghost" data-more="${esc(key)}">${showAll.has(key) ? `Show the top ${TOP}` : `Show all ${total.toLocaleString()}`}</button> `;
+      if (hidden.length) h += `<button class="ghost" data-hid="${esc(key)}">${showHidden.has(key) ? 'Hide the' : 'Show the'} ${hidden.length.toLocaleString()} hidden by the blocklist</button>`;
+      if (showHidden.has(key) && hidden.length)
+        h += `<table class="t hiddenlist"><tr><th>Value</th><th>Hidden by</th></tr>${hidden.map(x => `<tr><td class="mono ellip" title="${esc(x.value)}">${esc(x.value)}</td><td class="mono muted">${esc(x.rule)}</td></tr>`).join('')}</table>`;
+      return h ? `<div class="listfoot">${h}</div>` : '';
+    }
+    const cnt = (all, hid, key) => `${all.length.toLocaleString()}${all.length > TOP && !showAll.has(key) ? `, top ${TOP} shown` : ''}${hid.length ? ` · ${hid.length.toLocaleString()} hidden` : ''}`;
     function findingsHtml(inv) {
       const mapped = new Set((inv.entities.seeds || []).map(s => s.value.toLowerCase()));
       const runs = inv.network.filter(n => n.findings || n.report);
@@ -188,7 +207,9 @@ const WB = (() => {
         const mapBtn = v => mapped.has(String(v).toLowerCase()) ? '<span class="muted">mapped</span>' :
           `<button data-map="${esc(v)}">Map</button>`;
         const chk = v => mapped.has(String(v).toLowerCase()) ? '' : `<input type="checkbox" class="sel" value="${esc(v)}">`;
-        const src = (f.sources || []).slice(0, 50), cb = (f.callbacks || []).slice(0, 50);
+        const H = f.hidden || {}, hs = H.sources || [], hc = H.callbacks || [];
+        const kS = n.job + ':src', kC = n.job + ':cb', allS = f.sources || [], allC = f.callbacks || [];
+        const src = showAll.has(kS) ? allS : allS.slice(0, TOP), cb = showAll.has(kC) ? allC : allC.slice(0, TOP);
         return `<div class="nrun" style="margin-bottom:18px">
           ${n.mode && n.mode.mode === 'matched-only' ? `<div class="note warn" style="margin:0 0 8px">Analysed on matched parameters only (${esc(n.mode.reason)}): attack findings are complete; series cover only those parameters.</div>` : ''}
           <div class="toolbar"><div><b>${esc(n.title)}</b> ${badge(n.status)}
@@ -198,20 +219,33 @@ const WB = (() => {
               ${n.can_reanalyse ? `<button data-reanalyse="${esc(n.job)}" title="Run Payload Analyzer again on this export (after updating it). Splunk isn't queried.">Re-analyse</button>` : ''}
               <button class="map-sel">Map selected</button></div></div>
           <div class="grid2" style="margin-top:6px">
-            <div><h3>Attack sources (${(f.sources || []).length})</h3>
+            <div><h3>Attack sources (${cnt(allS, hs, kS)})</h3>
               ${src.length ? `<table class="t"><tr><th></th><th>Address</th><th class="right">Requests</th><th>Categories</th><th>Active</th><th></th></tr>
               ${src.map(s => `<tr><td>${chk(s.value)}</td><td class="mono">${esc(s.value)}</td><td class="right">${s.requests.toLocaleString()}</td>
                 <td>${s.categories.map(c => `<span class="badge cat">${esc(c)}</span>`).join('')}</td>
-                <td class="mono nowrap muted">${esc(s.first || '')}${s.last && s.last !== s.first ? '<br>' + esc(s.last) : ''}</td><td>${mapBtn(s.value)}</td></tr>`).join('')}</table>` : '<div class="empty">None.</div>'}</div>
-            <div><h3>Callbacks and embedded hosts (${(f.callbacks || []).length})</h3>
+                <td class="mono nowrap muted">${esc(s.first || '')}${s.last && s.last !== s.first ? '<br>' + esc(s.last) : ''}</td><td class="nowrap">${mapBtn(s.value)} ${hideBtn(s.value)}</td></tr>`).join('')}</table>` : '<div class="empty">None.</div>'}
+              ${listFoot(kS, allS.length, hs)}</div>
+            <div><h3>Callbacks and embedded hosts (${cnt(allC, hc, kC)})</h3>
               ${cb.length ? `<table class="t"><tr><th></th><th>Value</th><th>Kind</th><th>Categories</th><th></th></tr>
               ${cb.map(c => `<tr><td>${chk(c.value)}</td><td class="mono ellip" title="${esc(c.value)}">${esc(c.value)}</td>
                 <td class="muted">${esc(c.kind)}${c.internal ? ' · internal' : ''}</td>
-                <td>${c.categories.map(x => `<span class="badge cat">${esc(x)}</span>`).join('')}</td><td>${mapBtn(c.value)}</td></tr>`).join('')}</table>` : '<div class="empty">None.</div>'}</div>
+                <td>${c.categories.map(x => `<span class="badge cat">${esc(x)}</span>`).join('')}</td><td class="nowrap">${mapBtn(c.value)} ${hideBtn(c.value)}</td></tr>`).join('')}</table>` : '<div class="empty">None.</div>'}
+              ${listFoot(kC, allC.length, hc)}</div>
           </div></div>`;
       }).join('');
     }
     $('#nf').addEventListener('click', async e => {
+      const mo = e.target.closest('[data-more]'), hi = e.target.closest('[data-hid]'), bk = e.target.closest('[data-block]');
+      if (mo || hi) { const set = mo ? showAll : showHidden, k = (mo || hi).dataset[mo ? 'more' : 'hid'];
+        set.has(k) ? set.delete(k) : set.add(k); force = true; render(last); return; }
+      if (bk) {
+        const {entry} = await api('/api/blocklist/suggest', {value: bk.dataset.block});
+        const v = prompt(`Hide from the findings of every investigation.\n\nBlocklist entry (edit it if needed):\n` +
+          `  example.org = the domain and its subdomains · 1.2.3.0/24 = addresses · =value = this exact value`, entry);
+        if (!v || !v.trim()) return;
+        try { await api('/api/blocklist/add', {entry: v.trim()}); force = true; refresh(); } catch (err) { alert(err.message); }
+        return;
+      }
       const ra = e.target.closest('[data-reanalyse]');
       if (ra) {
         ra.disabled = true;

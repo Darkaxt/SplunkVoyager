@@ -93,6 +93,13 @@ exported before this change have no sizes: run the analysis again from Splunk to
 the old export).
 `python network_map.py analysis.json -o attack_map.html [--sanitize] [--requests requests.jsonl]` builds it by hand.
 
+**Findings lists and the blocklist.** Each network run lists its attack sources and the callbacks / hosts found
+inside payloads, ranked; the top 50 are shown, *Show all* lists every value. Values that are not indicators
+(XML namespaces such as `www.w3.org` quoted in payloads, placeholders like `http://a`) are hidden by a global
+blocklist, edited under *Settings* or with *Hide* on a row: domains with their subdomains, wildcards, addresses
+and networks, exact values or regular expressions, plus a switch for single-label names. Nothing is deleted:
+each list shows how many values are hidden and, on demand, which entry hides each one.
+
 **After updating Payload Analyzer**, *Re-analyse* on a network run runs the analysis, report and findings
 again on the export it already has; Splunk isn't queried.
 
@@ -137,6 +144,7 @@ with the new range. Each script has `--help`. The command-line tools use the def
 | `splunk_export.py` | resumable, windowed Splunk export |
 | `network_feed.py` | query builder, window merge and findings between the export and Payload Analyzer |
 | `network_map.py`, `network_map_template.html` | attack map of a network run |
+| `blocklist.py` | global blocklist for the findings lists |
 | `exportfiles.py` | export folders: part files, per-window zips or `export.zip`; `pack` command |
 | `pivot_graph.py`, `pivot_graph_template.html` | entity mapper |
 | `payload_analyzer/` | Payload Analyzer, unchanged copy (commit in `UPSTREAM_COMMIT`), standard library only |
